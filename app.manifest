@@ -1,0 +1,60 @@
+{
+    "dependencies": {
+        "VisiCore_TA_AI_Observability": {
+            "version": ">=1.0.0"
+        }
+    },
+    "incompatibleApps": null,
+    "info": {
+        "author": [
+            {
+                "company": null,
+                "email": null,
+                "name": "Jacob Evans"
+            }
+        ],
+        "classification": {
+            "categories": [
+                "IT Operations"
+            ],
+            "developmentStatus": "Production/Stable",
+            "intendedAudience": "IT Professionals"
+        },
+        "commonInformationModels": null,
+        "description": "AI Observability dashboards for Claude, Gemini, and other LLM providers. Aligned with OpenTelemetry GenAI semantic conventions.",
+        "id": {
+            "group": null,
+            "name": "VisiCore_App_for_AI_Observability",
+            "version": "0.1.0"
+        },
+        "license": {
+            "name": null,
+            "text": null,
+            "uri": null
+        },
+        "privacyPolicy": {
+            "name": null,
+            "text": null,
+            "uri": null
+        },
+        "releaseDate": null,
+        "releaseNotes": {
+            "name": "README",
+            "text": "README.md",
+            "uri": ""
+        },
+        "title": "VisiCore App for AI Observability"
+    },
+    "inputGroups": null,
+    "platformRequirements": null,
+    "schemaVersion": "2.0.0",
+    "supportedDeployments": [
+        "_standalone",
+        "_distributed",
+        "_search_head_clustering"
+    ],
+    "targetWorkloads": [
+        "_search_heads"
+    ],
+    "tasks": null
+}
