@@ -1,0 +1,348 @@
+<dashboard version="2" theme="dark">
+  <label>Overview</label>
+  <description>Claude Code AI Observability - Overview Dashboard</description>
+  <definition><![CDATA[
+{
+  "dataSources": {
+    "ds_base_assistant": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_assistant_events` | spath | `extract_tokens` | eval model='message.model', stop_reason='message.stop_reason'",
+        "queryParameters": {
+          "earliest": "$global_time.earliest$",
+          "latest": "$global_time.latest$"
+        }
+      },
+      "name": "Base Assistant Events"
+    },
+    "ds_base_all": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_all_session_events` | spath",
+        "queryParameters": {
+          "earliest": "$global_time.earliest$",
+          "latest": "$global_time.latest$"
+        }
+      },
+      "name": "Base All Events"
+    },
+    "ds_kpi_messages": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_assistant",
+        "query": "| stats count"
+      },
+      "name": "KPI Messages"
+    },
+    "ds_kpi_sessions": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_all",
+        "query": "| stats dc(sessionId) as count"
+      },
+      "name": "KPI Sessions"
+    },
+    "ds_kpi_tokens": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_assistant",
+        "query": "| stats sum(input_tokens) as i, sum(output_tokens) as o, sum(cache_read) as cr, sum(cache_created) as cc | eval count=i+o+cr+cc"
+      },
+      "name": "KPI Tokens"
+    },
+    "ds_kpi_cost": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_assistant",
+        "query": "| eval cost_usd=case(match(model,\"claude-opus-4|claude-4-opus\"),(input_tokens*15.0/1000000)+(output_tokens*75.0/1000000)+(cache_read*1.5/1000000)+(cache_created*18.75/1000000),match(model,\"claude-sonnet-4|claude-4-sonnet\"),(input_tokens*3.0/1000000)+(output_tokens*15.0/1000000)+(cache_read*0.30/1000000)+(cache_created*3.75/1000000),match(model,\"claude.*haiku\"),(input_tokens*0.25/1000000)+(output_tokens*1.25/1000000)+(cache_read*0.025/1000000)+(cache_created*0.3125/1000000),1=1,(input_tokens*15.0/1000000)+(output_tokens*75.0/1000000)+(cache_read*1.5/1000000)+(cache_created*18.75/1000000)) | stats sum(cost_usd) as count | eval count=\"$\".round(count,2)"
+      },
+      "name": "KPI Cost"
+    },
+    "ds_kpi_cache": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_assistant",
+        "query": "| eval total_input=input_tokens+cache_read+cache_created | where total_input>0 | eval p=cache_read/total_input*100 | stats avg(p) as count | eval count=round(count,1).\"%\""
+      },
+      "name": "KPI Cache Hit"
+    },
+    "ds_tokens_time": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_assistant",
+        "query": "| timechart sum(input_tokens) as \"Input Tokens\", sum(output_tokens) as \"Output Tokens\""
+      },
+      "name": "Tokens Over Time"
+    },
+    "ds_model_time": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_assistant",
+        "query": "| timechart count by model"
+      },
+      "name": "Messages by Model Over Time"
+    },
+    "ds_stop_pie": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_assistant",
+        "query": "| stats count by stop_reason | sort - count"
+      },
+      "name": "Stop Reasons"
+    },
+    "ds_model_pie": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_assistant",
+        "query": "| stats count by model | sort - count"
+      },
+      "name": "Model Distribution"
+    },
+    "ds_cache_time": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_assistant",
+        "query": "| eval total_input=input_tokens+cache_read+cache_created | where total_input>0 | eval cache_hit_pct=cache_read/total_input*100 | timechart avg(cache_hit_pct) as \"Cache Hit %\""
+      },
+      "name": "Cache Hit Over Time"
+    },
+    "ds_cost_session": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_assistant",
+        "query": "| eval cost_usd=case(match(model,\"claude-opus-4|claude-4-opus\"),(input_tokens*15.0/1000000)+(output_tokens*75.0/1000000)+(cache_read*1.5/1000000)+(cache_created*18.75/1000000),match(model,\"claude-sonnet-4|claude-4-sonnet\"),(input_tokens*3.0/1000000)+(output_tokens*15.0/1000000)+(cache_read*0.30/1000000)+(cache_created*3.75/1000000),match(model,\"claude.*haiku\"),(input_tokens*0.25/1000000)+(output_tokens*1.25/1000000)+(cache_read*0.025/1000000)+(cache_created*0.3125/1000000),1=1,(input_tokens*15.0/1000000)+(output_tokens*75.0/1000000)+(cache_read*1.5/1000000)+(cache_created*18.75/1000000)) | stats sum(cost_usd) as total_cost, count as messages, sum(total_tokens) as tokens by sessionId | eval total_cost=round(total_cost,4) | sort - total_cost | head 25 | rename sessionId as \"Session ID\", total_cost as \"Cost (USD)\", messages as \"Messages\", tokens as \"Total Tokens\""
+      },
+      "name": "Cost by Session"
+    },
+    "ds_recent_sessions": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_assistant",
+        "query": "| stats count as messages, sum(total_tokens) as tokens, values(model) as models, latest(cwd) as project by sessionId | sort - messages | head 30 | rename sessionId as \"Session ID\", messages as \"Messages\", tokens as \"Total Tokens\", models as \"Models\", project as \"Project\""
+      },
+      "name": "Recent Sessions"
+    },
+    "ds_proj_bar": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_all",
+        "query": "| eval cwd=coalesce(cwd,\"unknown\") | where cwd!=\"unknown\" | stats count by cwd | sort - count | head 15 | rename cwd as \"Project\""
+      },
+      "name": "Activity by Project"
+    },
+    "ds_tool_pie": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_assistant_events` | spath | `extract_tools` | stats count by name | sort - count",
+        "queryParameters": {
+          "earliest": "$global_time.earliest$",
+          "latest": "$global_time.latest$"
+        }
+      },
+      "name": "Tool Call Distribution"
+    },
+    "ds_tool_time": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_assistant_events` | spath | `extract_tools` | timechart count by name",
+        "queryParameters": {
+          "earliest": "$global_time.earliest$",
+          "latest": "$global_time.latest$"
+        }
+      },
+      "name": "Tool Calls Over Time"
+    },
+    "ds_file_writes": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_assistant_events` | spath | `extract_tools` | search name=\"Write\" | stats count as writes by object_path | sort - writes | head 25 | rename object_path as \"File Path\", writes as \"Writes\"",
+        "queryParameters": {
+          "earliest": "$global_time.earliest$",
+          "latest": "$global_time.latest$"
+        }
+      },
+      "name": "Files Written"
+    }
+  },
+  "defaults": {},
+  "inputs": {
+    "input_timerange": {
+      "type": "input.timerange",
+      "options": {
+        "token": "global_time",
+        "defaultValue": "-7d@d,now"
+      },
+      "title": "Time Range"
+    }
+  },
+  "layout": {
+    "type": "grid",
+    "options": {},
+    "structure": [
+      {"item": "viz_kpi_messages", "type": "block", "position": {"x": 0, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_kpi_sessions", "type": "block", "position": {"x": 240, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_kpi_tokens", "type": "block", "position": {"x": 480, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_kpi_cost", "type": "block", "position": {"x": 720, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_kpi_cache", "type": "block", "position": {"x": 960, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_tokens_time", "type": "block", "position": {"x": 0, "y": 120, "w": 600, "h": 300}},
+      {"item": "viz_model_time", "type": "block", "position": {"x": 600, "y": 120, "w": 600, "h": 300}},
+      {"item": "viz_tool_pie", "type": "block", "position": {"x": 0, "y": 420, "w": 360, "h": 300}},
+      {"item": "viz_tool_time", "type": "block", "position": {"x": 360, "y": 420, "w": 480, "h": 300}},
+      {"item": "viz_file_writes", "type": "block", "position": {"x": 840, "y": 420, "w": 360, "h": 300}},
+      {"item": "viz_proj_bar", "type": "block", "position": {"x": 0, "y": 720, "w": 600, "h": 250}},
+      {"item": "viz_stop_pie", "type": "block", "position": {"x": 600, "y": 720, "w": 300, "h": 250}},
+      {"item": "viz_model_pie", "type": "block", "position": {"x": 900, "y": 720, "w": 300, "h": 250}},
+      {"item": "viz_cache_time", "type": "block", "position": {"x": 0, "y": 970, "w": 600, "h": 300}},
+      {"item": "viz_cost_session", "type": "block", "position": {"x": 600, "y": 970, "w": 600, "h": 300}},
+      {"item": "viz_recent_sessions", "type": "block", "position": {"x": 0, "y": 1270, "w": 1200, "h": 300}}
+    ],
+    "globalInputs": ["input_timerange"]
+  },
+  "title": "Overview",
+  "description": "Claude Code AI Observability - Overview Dashboard",
+  "visualizations": {
+    "viz_kpi_messages": {
+      "type": "splunk.singlevalue",
+      "title": "Assistant Messages",
+      "dataSources": {
+        "primary": "ds_kpi_messages"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_kpi_sessions": {
+      "type": "splunk.singlevalue",
+      "title": "Unique Sessions",
+      "dataSources": {
+        "primary": "ds_kpi_sessions"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_kpi_tokens": {
+      "type": "splunk.singlevalue",
+      "title": "Total Tokens",
+      "dataSources": {
+        "primary": "ds_kpi_tokens"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_kpi_cost": {
+      "type": "splunk.singlevalue",
+      "title": "Est. Cost (USD)",
+      "dataSources": {
+        "primary": "ds_kpi_cost"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_kpi_cache": {
+      "type": "splunk.singlevalue",
+      "title": "Avg Cache Hit %",
+      "dataSources": {
+        "primary": "ds_kpi_cache"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_tokens_time": {
+      "type": "splunk.area",
+      "title": "Token Consumption Over Time",
+      "dataSources": {
+        "primary": "ds_tokens_time"
+      },
+      "options": {}
+    },
+    "viz_model_time": {
+      "type": "splunk.area",
+      "title": "Messages by Model Over Time",
+      "dataSources": {
+        "primary": "ds_model_time"
+      },
+      "options": {}
+    },
+    "viz_tool_pie": {
+      "type": "splunk.pie",
+      "title": "Tool Call Distribution",
+      "dataSources": {
+        "primary": "ds_tool_pie"
+      },
+      "options": {}
+    },
+    "viz_tool_time": {
+      "type": "splunk.area",
+      "title": "Tool Calls Over Time",
+      "dataSources": {
+        "primary": "ds_tool_time"
+      },
+      "options": {}
+    },
+    "viz_file_writes": {
+      "type": "splunk.table",
+      "title": "Files Written",
+      "dataSources": {
+        "primary": "ds_file_writes"
+      },
+      "options": {}
+    },
+    "viz_proj_bar": {
+      "type": "splunk.bar",
+      "title": "Activity by Project",
+      "dataSources": {
+        "primary": "ds_proj_bar"
+      },
+      "options": {
+        "xField": "count",
+        "yField": "> primary | seriesByName('Project')"
+      }
+    },
+    "viz_stop_pie": {
+      "type": "splunk.pie",
+      "title": "Stop Reasons",
+      "dataSources": {
+        "primary": "ds_stop_pie"
+      },
+      "options": {}
+    },
+    "viz_model_pie": {
+      "type": "splunk.pie",
+      "title": "Model Distribution",
+      "dataSources": {
+        "primary": "ds_model_pie"
+      },
+      "options": {}
+    },
+    "viz_cache_time": {
+      "type": "splunk.area",
+      "title": "Cache Hit % Over Time",
+      "dataSources": {
+        "primary": "ds_cache_time"
+      },
+      "options": {}
+    },
+    "viz_cost_session": {
+      "type": "splunk.table",
+      "title": "Cost by Session",
+      "dataSources": {
+        "primary": "ds_cost_session"
+      },
+      "options": {}
+    },
+    "viz_recent_sessions": {
+      "type": "splunk.table",
+      "title": "Recent Sessions",
+      "dataSources": {
+        "primary": "ds_recent_sessions"
+      },
+      "options": {}
+    }
+  }
+}
+  ]]></definition>
+</dashboard>

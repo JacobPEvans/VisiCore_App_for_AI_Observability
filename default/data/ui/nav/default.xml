@@ -1,0 +1,9 @@
+<nav color="#1B2A4A">
+    <view name="overview" default="true" />
+    <view name="token_usage" />
+    <view name="cost_analysis" />
+    <view name="tool_activity" />
+    <view name="sessions" />
+    <view name="cache_performance" />
+    <view name="search" />
+</nav>

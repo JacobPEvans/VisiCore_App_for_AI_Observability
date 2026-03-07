@@ -1,0 +1,209 @@
+<dashboard version="2" theme="dark">
+  <label>Token Usage</label>
+  <description>Detailed token consumption and efficiency analysis</description>
+  <definition><![CDATA[
+{
+  "dataSources": {
+    "ds_base": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_assistant_events` | spath | `extract_tokens` | eval model='message.model'",
+        "queryParameters": {
+          "earliest": "$global_time.earliest$",
+          "latest": "$global_time.latest$"
+        }
+      },
+      "name": "Base Token Events"
+    },
+    "ds_kpi_input": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| stats sum(input_tokens) as count | eval count=tostring(count,\"commas\")"
+      },
+      "name": "KPI Input Tokens"
+    },
+    "ds_kpi_output": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| stats sum(output_tokens) as count | eval count=tostring(count,\"commas\")"
+      },
+      "name": "KPI Output Tokens"
+    },
+    "ds_kpi_cache_read": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| stats sum(cache_read) as count | eval count=tostring(count,\"commas\")"
+      },
+      "name": "KPI Cache Read"
+    },
+    "ds_kpi_cache_create": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| stats sum(cache_created) as count | eval count=tostring(count,\"commas\")"
+      },
+      "name": "KPI Cache Created"
+    },
+    "ds_kpi_ratio": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| stats sum(input_tokens) as i, sum(output_tokens) as o | eval count=round(o/i, 2) | fields count"
+      },
+      "name": "KPI Output/Input Ratio"
+    },
+    "ds_tokens_time": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| timechart sum(input_tokens) as \"Input\", sum(output_tokens) as \"Output\", sum(cache_read) as \"Cache Read\", sum(cache_created) as \"Cache Created\""
+      },
+      "name": "Token Breakdown Over Time"
+    },
+    "ds_model_bar": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| stats sum(total_tokens) as tokens by model | sort - tokens | head 10 | rename model as \"Model\", tokens as \"Total Tokens\""
+      },
+      "name": "Top Models by Tokens"
+    },
+    "ds_session_table": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| stats sum(input_tokens) as input, sum(output_tokens) as output, sum(cache_read) as cache_rd, sum(cache_created) as cache_cr, sum(total_tokens) as total by sessionId | sort - total | head 20 | rename sessionId as \"Session\", input as \"Input\", output as \"Output\", cache_rd as \"Cache Read\", cache_cr as \"Cache Create\", total as \"Total\""
+      },
+      "name": "Sessions by Token Usage"
+    },
+    "ds_efficiency": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| timechart sum(output_tokens) as out, sum(input_tokens) as inp | eval ratio=round(out/inp, 3) | fields _time, ratio | rename ratio as \"Output/Input Ratio\""
+      },
+      "name": "Token Efficiency Over Time"
+    }
+  },
+  "defaults": {},
+  "inputs": {
+    "input_timerange": {
+      "type": "input.timerange",
+      "options": {
+        "token": "global_time",
+        "defaultValue": "-7d@d,now"
+      },
+      "title": "Time Range"
+    }
+  },
+  "layout": {
+    "type": "grid",
+    "options": {},
+    "structure": [
+      {"item": "viz_kpi_input", "type": "block", "position": {"x": 0, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_kpi_output", "type": "block", "position": {"x": 240, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_kpi_cache_read", "type": "block", "position": {"x": 480, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_kpi_cache_create", "type": "block", "position": {"x": 720, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_kpi_ratio", "type": "block", "position": {"x": 960, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_tokens_time", "type": "block", "position": {"x": 0, "y": 120, "w": 1200, "h": 300}},
+      {"item": "viz_model_bar", "type": "block", "position": {"x": 0, "y": 420, "w": 600, "h": 300}},
+      {"item": "viz_session_table", "type": "block", "position": {"x": 600, "y": 420, "w": 600, "h": 300}},
+      {"item": "viz_efficiency", "type": "block", "position": {"x": 0, "y": 720, "w": 1200, "h": 300}}
+    ],
+    "globalInputs": ["input_timerange"]
+  },
+  "title": "Token Usage",
+  "description": "Detailed token consumption and efficiency analysis",
+  "visualizations": {
+    "viz_kpi_input": {
+      "type": "splunk.singlevalue",
+      "title": "Input Tokens",
+      "dataSources": {
+        "primary": "ds_kpi_input"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_kpi_output": {
+      "type": "splunk.singlevalue",
+      "title": "Output Tokens",
+      "dataSources": {
+        "primary": "ds_kpi_output"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_kpi_cache_read": {
+      "type": "splunk.singlevalue",
+      "title": "Cache Read",
+      "dataSources": {
+        "primary": "ds_kpi_cache_read"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_kpi_cache_create": {
+      "type": "splunk.singlevalue",
+      "title": "Cache Created",
+      "dataSources": {
+        "primary": "ds_kpi_cache_create"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_kpi_ratio": {
+      "type": "splunk.singlevalue",
+      "title": "Output/Input Ratio",
+      "dataSources": {
+        "primary": "ds_kpi_ratio"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_tokens_time": {
+      "type": "splunk.area",
+      "title": "Token Breakdown Over Time",
+      "dataSources": {
+        "primary": "ds_tokens_time"
+      },
+      "options": {}
+    },
+    "viz_model_bar": {
+      "type": "splunk.bar",
+      "title": "Top Models by Tokens",
+      "dataSources": {
+        "primary": "ds_model_bar"
+      },
+      "options": {
+        "xField": "> primary | seriesByName('Total Tokens')",
+        "yField": "> primary | seriesByName('Model')"
+      }
+    },
+    "viz_session_table": {
+      "type": "splunk.table",
+      "title": "Sessions by Token Usage",
+      "dataSources": {
+        "primary": "ds_session_table"
+      },
+      "options": {}
+    },
+    "viz_efficiency": {
+      "type": "splunk.line",
+      "title": "Token Efficiency Over Time",
+      "dataSources": {
+        "primary": "ds_efficiency"
+      },
+      "options": {}
+    }
+  }
+}
+  ]]></definition>
+</dashboard>

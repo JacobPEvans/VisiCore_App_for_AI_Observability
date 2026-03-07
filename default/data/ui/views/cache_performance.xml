@@ -1,0 +1,180 @@
+<dashboard version="2" theme="dark">
+  <label>Cache Performance</label>
+  <description>Prompt caching efficiency, cache hit rates, and token savings analysis.</description>
+  <definition><![CDATA[
+{
+  "dataSources": {
+    "ds_base": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_assistant_events` | spath | `extract_tokens` | eval model='message.model'",
+        "queryParameters": {
+          "earliest": "$global_time.earliest$",
+          "latest": "$global_time.latest$"
+        }
+      },
+      "name": "Base Cache Data"
+    },
+    "ds_kpi_cache_pct": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| eval total_input=input_tokens+cache_read+cache_created | where total_input>0 | eval p=cache_read/total_input*100 | stats avg(p) as count | eval count=round(count,1).\"%\""
+      },
+      "name": "Avg Cache Hit %"
+    },
+    "ds_kpi_cache_reads": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| stats sum(cache_read) as count | eval count=tostring(count,\"commas\")"
+      },
+      "name": "Total Cache Reads"
+    },
+    "ds_kpi_cache_creates": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| stats sum(cache_created) as count | eval count=tostring(count,\"commas\")"
+      },
+      "name": "Total Cache Creates"
+    },
+    "ds_kpi_savings": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| eval savings=(cache_read * (15.0 - 1.5) / 1000000) | stats sum(savings) as count | eval count=\"$\".round(count,2)"
+      },
+      "name": "Est. Savings"
+    },
+    "ds_cache_time": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| eval total_input=input_tokens+cache_read+cache_created | where total_input>0 | eval cache_hit_pct=cache_read/total_input*100 | timechart avg(cache_hit_pct) as \"Cache Hit %\""
+      },
+      "name": "Cache Hit % Over Time"
+    },
+    "ds_cache_model": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| eval total_input=input_tokens+cache_read+cache_created | where total_input>0 | eval cache_hit_pct=round(cache_read/total_input*100,1) | stats avg(cache_hit_pct) as \"Avg Cache Hit %\" by model | sort - \"Avg Cache Hit %\" | rename model as \"Model\""
+      },
+      "name": "Cache Hit % by Model"
+    },
+    "ds_cache_tokens_time": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| timechart sum(cache_read) as \"Cache Read\", sum(cache_created) as \"Cache Created\""
+      },
+      "name": "Cache Tokens Over Time"
+    },
+    "ds_cache_sessions": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| stats sum(cache_read) as cache_rd, sum(cache_created) as cache_cr, sum(input_tokens) as input, sum(total_tokens) as total by sessionId | eval total_input=input+cache_rd+cache_cr | where total_input>0 | eval cache_hit_pct=round(cache_rd/total_input*100,1) | sort - cache_hit_pct | head 25 | rename sessionId as \"Session\", cache_rd as \"Cache Read\", cache_cr as \"Cache Created\", cache_hit_pct as \"Cache Hit %\", total as \"Total Tokens\""
+      },
+      "name": "Sessions by Cache Performance"
+    }
+  },
+  "visualizations": {
+    "viz_kpi_cache_pct": {
+      "type": "splunk.singlevalue",
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      },
+      "dataSources": {
+        "primary": "ds_kpi_cache_pct"
+      },
+      "title": "Avg Cache Hit %"
+    },
+    "viz_kpi_cache_reads": {
+      "type": "splunk.singlevalue",
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      },
+      "dataSources": {
+        "primary": "ds_kpi_cache_reads"
+      },
+      "title": "Total Cache Reads"
+    },
+    "viz_kpi_cache_creates": {
+      "type": "splunk.singlevalue",
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      },
+      "dataSources": {
+        "primary": "ds_kpi_cache_creates"
+      },
+      "title": "Total Cache Creates"
+    },
+    "viz_kpi_savings": {
+      "type": "splunk.singlevalue",
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      },
+      "dataSources": {
+        "primary": "ds_kpi_savings"
+      },
+      "title": "Est. Savings"
+    },
+    "viz_cache_time": {
+      "type": "splunk.area",
+      "dataSources": {
+        "primary": "ds_cache_time"
+      },
+      "title": "Cache Hit % Over Time"
+    },
+    "viz_cache_model": {
+      "type": "splunk.bar",
+      "dataSources": {
+        "primary": "ds_cache_model"
+      },
+      "title": "Cache Hit % by Model"
+    },
+    "viz_cache_tokens_time": {
+      "type": "splunk.area",
+      "dataSources": {
+        "primary": "ds_cache_tokens_time"
+      },
+      "title": "Cache Read vs Created Tokens"
+    },
+    "viz_cache_sessions": {
+      "type": "splunk.table",
+      "dataSources": {
+        "primary": "ds_cache_sessions"
+      },
+      "title": "Sessions by Cache Performance"
+    }
+  },
+  "inputs": {
+    "input_timerange": {
+      "type": "input.timerange",
+      "options": {
+        "token": "global_time",
+        "defaultValue": "-7d@d,now"
+      },
+      "title": "Time Range"
+    }
+  },
+  "layout": {
+    "type": "grid",
+    "options": {},
+    "structure": [
+      {"item": "viz_kpi_cache_pct", "type": "block", "position": {"x": 0, "y": 0, "w": 300, "h": 120}},
+      {"item": "viz_kpi_cache_reads", "type": "block", "position": {"x": 300, "y": 0, "w": 300, "h": 120}},
+      {"item": "viz_kpi_cache_creates", "type": "block", "position": {"x": 600, "y": 0, "w": 300, "h": 120}},
+      {"item": "viz_kpi_savings", "type": "block", "position": {"x": 900, "y": 0, "w": 300, "h": 120}},
+      {"item": "viz_cache_time", "type": "block", "position": {"x": 0, "y": 120, "w": 600, "h": 300}},
+      {"item": "viz_cache_model", "type": "block", "position": {"x": 600, "y": 120, "w": 600, "h": 300}},
+      {"item": "viz_cache_tokens_time", "type": "block", "position": {"x": 0, "y": 420, "w": 600, "h": 300}},
+      {"item": "viz_cache_sessions", "type": "block", "position": {"x": 600, "y": 420, "w": 600, "h": 300}}
+    ],
+    "globalInputs": ["input_timerange"]
+  }
+}
+  ]]></definition>
+</dashboard>
