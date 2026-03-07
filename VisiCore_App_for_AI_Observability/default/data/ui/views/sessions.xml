@@ -1,0 +1,145 @@
+<dashboard version="2" theme="dark">
+  <label>Sessions</label>
+  <description>Session-level analysis including message counts, token usage, and project activity.</description>
+  <definition><![CDATA[
+{
+  "dataSources": {
+    "ds_base": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_all_session_events` | spath | `extract_tokens` | eval model='message.model'",
+        "queryParameters": {
+          "earliest": "$global_time.earliest$",
+          "latest": "$global_time.latest$"
+        }
+      },
+      "name": "Base Session Data"
+    },
+    "ds_kpi_sessions": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| stats dc(sessionId) as count"
+      },
+      "name": "Total Sessions"
+    },
+    "ds_kpi_avg_msgs": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| stats count as msgs by sessionId | stats avg(msgs) as count | eval count=round(count,1)"
+      },
+      "name": "Avg Messages Per Session"
+    },
+    "ds_kpi_avg_tokens": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| stats sum(total_tokens) as tokens by sessionId | stats avg(tokens) as count | eval count=tostring(round(count,0),\"commas\")"
+      },
+      "name": "Avg Tokens Per Session"
+    },
+    "ds_session_table": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| stats count as messages, sum(total_tokens) as tokens, values(model) as models, latest(cwd) as project, min(_time) as started, max(_time) as ended by sessionId | eval duration=ended-started | eval duration_min=round(duration/60,1) | sort - messages | rename sessionId as \"Session\", messages as \"Messages\", tokens as \"Total Tokens\", models as \"Models\", project as \"Project\", duration_min as \"Duration (min)\""
+      },
+      "name": "Session Detail"
+    },
+    "ds_sessions_time": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| timechart dc(sessionId) as \"Sessions\""
+      },
+      "name": "Sessions Over Time"
+    },
+    "ds_sessions_project": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base",
+        "query": "| eval cwd=coalesce(cwd,\"unknown\") | where cwd!=\"unknown\" | stats dc(sessionId) as sessions by cwd | sort - sessions | head 15 | rename cwd as \"Project\", sessions as \"Sessions\""
+      },
+      "name": "Sessions by Project"
+    }
+  },
+  "visualizations": {
+    "viz_kpi_sessions": {
+      "type": "splunk.singlevalue",
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      },
+      "dataSources": {
+        "primary": "ds_kpi_sessions"
+      },
+      "title": "Total Sessions"
+    },
+    "viz_kpi_avg_msgs": {
+      "type": "splunk.singlevalue",
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      },
+      "dataSources": {
+        "primary": "ds_kpi_avg_msgs"
+      },
+      "title": "Avg Messages/Session"
+    },
+    "viz_kpi_avg_tokens": {
+      "type": "splunk.singlevalue",
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      },
+      "dataSources": {
+        "primary": "ds_kpi_avg_tokens"
+      },
+      "title": "Avg Tokens/Session"
+    },
+    "viz_session_table": {
+      "type": "splunk.table",
+      "dataSources": {
+        "primary": "ds_session_table"
+      },
+      "title": "Session Detail"
+    },
+    "viz_sessions_time": {
+      "type": "splunk.area",
+      "dataSources": {
+        "primary": "ds_sessions_time"
+      },
+      "title": "Sessions Over Time"
+    },
+    "viz_sessions_project": {
+      "type": "splunk.bar",
+      "dataSources": {
+        "primary": "ds_sessions_project"
+      },
+      "title": "Sessions by Project"
+    }
+  },
+  "inputs": {
+    "input_timerange": {
+      "type": "input.timerange",
+      "options": {
+        "token": "global_time",
+        "defaultValue": "-7d@d,now"
+      },
+      "title": "Time Range"
+    }
+  },
+  "layout": {
+    "type": "grid",
+    "options": {},
+    "structure": [
+      {"item": "viz_kpi_sessions", "type": "block", "position": {"x": 0, "y": 0, "w": 400, "h": 120}},
+      {"item": "viz_kpi_avg_msgs", "type": "block", "position": {"x": 400, "y": 0, "w": 400, "h": 120}},
+      {"item": "viz_kpi_avg_tokens", "type": "block", "position": {"x": 800, "y": 0, "w": 400, "h": 120}},
+      {"item": "viz_session_table", "type": "block", "position": {"x": 0, "y": 120, "w": 1200, "h": 300}},
+      {"item": "viz_sessions_time", "type": "block", "position": {"x": 0, "y": 420, "w": 600, "h": 300}},
+      {"item": "viz_sessions_project", "type": "block", "position": {"x": 600, "y": 420, "w": 600, "h": 300}}
+    ],
+    "globalInputs": ["input_timerange"]
+  }
+}
+  ]]></definition>
+</dashboard>

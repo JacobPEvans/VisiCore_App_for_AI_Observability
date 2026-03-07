@@ -1,0 +1,183 @@
+<dashboard version="2" theme="dark">
+  <label>Tool Activity</label>
+  <description>Tool usage patterns, file operations, and tool call distribution.</description>
+  <definition><![CDATA[
+{
+  "dataSources": {
+    "ds_base_tools": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_assistant_events` | spath | `extract_tools`",
+        "queryParameters": {
+          "earliest": "$global_time.earliest$",
+          "latest": "$global_time.latest$"
+        }
+      },
+      "name": "Base Tool Data"
+    },
+    "ds_kpi_total": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_tools",
+        "query": "| stats count"
+      },
+      "name": "Total Tool Calls"
+    },
+    "ds_kpi_unique": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_tools",
+        "query": "| stats dc(name) as count"
+      },
+      "name": "Unique Tools"
+    },
+    "ds_kpi_top_tool": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_tools",
+        "query": "| stats count by name | sort - count | head 1 | fields name | rename name as count"
+      },
+      "name": "Most Common Tool"
+    },
+    "ds_kpi_per_msg": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_assistant_events` | spath | `extract_tools` | stats count as tools | appendcols [`claude_assistant_events` | stats count as msgs] | eval count=round(tools/msgs, 1)",
+        "queryParameters": {
+          "earliest": "$global_time.earliest$",
+          "latest": "$global_time.latest$"
+        }
+      },
+      "name": "Calls Per Message"
+    },
+    "ds_tool_dist": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_tools",
+        "query": "| stats count by name | sort - count"
+      },
+      "name": "Tool Distribution"
+    },
+    "ds_tool_time": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_tools",
+        "query": "| timechart count by name"
+      },
+      "name": "Tool Calls Over Time"
+    },
+    "ds_writes": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_tools",
+        "query": "| search name=\"Write\" | stats count as writes by object_path | sort - writes | head 25 | rename object_path as \"File Path\", writes as \"Writes\""
+      },
+      "name": "Files Written"
+    },
+    "ds_reads": {
+      "type": "ds.search",
+      "options": {
+        "extend": "ds_base_tools",
+        "query": "| search name=\"Read\" | stats count as reads by object_path | sort - reads | head 25 | rename object_path as \"File Path\", reads as \"Reads\""
+      },
+      "name": "Files Read"
+    }
+  },
+  "visualizations": {
+    "viz_kpi_total": {
+      "type": "splunk.singlevalue",
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      },
+      "dataSources": {
+        "primary": "ds_kpi_total"
+      },
+      "title": "Total Tool Calls"
+    },
+    "viz_kpi_unique": {
+      "type": "splunk.singlevalue",
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      },
+      "dataSources": {
+        "primary": "ds_kpi_unique"
+      },
+      "title": "Unique Tools"
+    },
+    "viz_kpi_top_tool": {
+      "type": "splunk.singlevalue",
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      },
+      "dataSources": {
+        "primary": "ds_kpi_top_tool"
+      },
+      "title": "Most Common Tool"
+    },
+    "viz_kpi_per_msg": {
+      "type": "splunk.singlevalue",
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      },
+      "dataSources": {
+        "primary": "ds_kpi_per_msg"
+      },
+      "title": "Calls Per Message"
+    },
+    "viz_tool_dist": {
+      "type": "splunk.pie",
+      "dataSources": {
+        "primary": "ds_tool_dist"
+      },
+      "title": "Tool Distribution"
+    },
+    "viz_tool_time": {
+      "type": "splunk.area",
+      "dataSources": {
+        "primary": "ds_tool_time"
+      },
+      "title": "Tool Calls Over Time"
+    },
+    "viz_writes": {
+      "type": "splunk.table",
+      "dataSources": {
+        "primary": "ds_writes"
+      },
+      "title": "Files Written"
+    },
+    "viz_reads": {
+      "type": "splunk.table",
+      "dataSources": {
+        "primary": "ds_reads"
+      },
+      "title": "Files Read"
+    }
+  },
+  "inputs": {
+    "input_timerange": {
+      "type": "input.timerange",
+      "options": {
+        "token": "global_time",
+        "defaultValue": "-7d@d,now"
+      },
+      "title": "Time Range"
+    }
+  },
+  "layout": {
+    "type": "grid",
+    "options": {},
+    "structure": [
+      {"item": "viz_kpi_total", "type": "block", "position": {"x": 0, "y": 0, "w": 300, "h": 120}},
+      {"item": "viz_kpi_unique", "type": "block", "position": {"x": 300, "y": 0, "w": 300, "h": 120}},
+      {"item": "viz_kpi_top_tool", "type": "block", "position": {"x": 600, "y": 0, "w": 300, "h": 120}},
+      {"item": "viz_kpi_per_msg", "type": "block", "position": {"x": 900, "y": 0, "w": 300, "h": 120}},
+      {"item": "viz_tool_dist", "type": "block", "position": {"x": 0, "y": 120, "w": 600, "h": 300}},
+      {"item": "viz_tool_time", "type": "block", "position": {"x": 600, "y": 120, "w": 600, "h": 300}},
+      {"item": "viz_writes", "type": "block", "position": {"x": 0, "y": 420, "w": 600, "h": 300}},
+      {"item": "viz_reads", "type": "block", "position": {"x": 600, "y": 420, "w": 600, "h": 300}}
+    ],
+    "globalInputs": ["input_timerange"]
+  }
+}
+  ]]></definition>
+</dashboard>
