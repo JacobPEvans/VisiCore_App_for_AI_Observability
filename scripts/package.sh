@@ -5,31 +5,33 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$REPO_ROOT/build"
 
+APP_NAME="VisiCore_App_for_AI_Observability"
+
 # Get version from app.conf
-get_version() {
-    local app_conf="$1/default/app.conf"
-    grep -m1 '^version' "$app_conf" | awk -F' = ' '{print $2}'
-}
+version=$(grep -m1 '^version' "$REPO_ROOT/default/app.conf" | awk -F' = ' '{print $2}')
 
 # Clean build directory
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
-# Package each app
-for app_dir in VisiCore_App_for_AI_Observability VisiCore_TA_AI_Observability; do
-    if [ ! -d "$REPO_ROOT/$app_dir" ]; then
-        echo "ERROR: $app_dir not found" >&2
-        exit 1
-    fi
+# Create tarball with proper root directory name
+echo "Packaging $APP_NAME v${version}..."
+tar -czf "$BUILD_DIR/${APP_NAME}-${version}.tar.gz" \
+    --transform "s,^\.,$APP_NAME," \
+    -C "$REPO_ROOT" \
+    --exclude='.git' \
+    --exclude='build' \
+    --exclude='.direnv' \
+    --exclude='.envrc' \
+    --exclude='flake.*' \
+    --exclude='scripts' \
+    --exclude='CLAUDE.md' \
+    --exclude='README.md' \
+    --exclude='.gitignore' \
+    --exclude='.DS_Store' \
+    .
 
-    version=$(get_version "$REPO_ROOT/$app_dir")
-    tarball="$BUILD_DIR/${app_dir}-${version}.tar.gz"
-
-    echo "Packaging $app_dir v${version}..."
-    tar -czf "$tarball" -C "$REPO_ROOT" "$app_dir"
-    echo "  -> $(basename "$tarball")"
-done
-
+echo "  -> ${APP_NAME}-${version}.tar.gz"
 echo ""
-echo "Build artifacts:"
+echo "Build artifact:"
 ls -lh "$BUILD_DIR"/*.tar.gz
