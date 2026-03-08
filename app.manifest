@@ -1,7 +1,7 @@
 {
     "dependencies": {
         "VisiCore_TA_AI_Observability": {
-            "version": ">=1.0.0"
+            "version": ">=0.1.0"
         }
     },
     "incompatibleApps": null,
