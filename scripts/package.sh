@@ -22,8 +22,6 @@ tar -czf "$BUILD_DIR/${APP_NAME}-${version}.tar.gz" \
     --exclude='.git' \
     --exclude='build' \
     --exclude='.direnv' \
-    --exclude='.envrc' \
-    --exclude='flake.*' \
     --exclude='scripts' \
     --exclude='CLAUDE.md' \
     --exclude='README.md' \
