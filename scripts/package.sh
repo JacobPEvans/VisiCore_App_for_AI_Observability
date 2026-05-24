@@ -27,6 +27,12 @@ tar -czf "$BUILD_DIR/${APP_NAME}-${version}.tar.gz" \
     --exclude='README.md' \
     --exclude='.gitignore' \
     --exclude='.DS_Store' \
+    --exclude='local' \
+    --exclude='.vscode' \
+    --exclude='.idea' \
+    --exclude='*.swp' \
+    --exclude='*.swo' \
+    --exclude='*~' \
     .
 
 echo "  -> ${APP_NAME}-${version}.tar.gz"
