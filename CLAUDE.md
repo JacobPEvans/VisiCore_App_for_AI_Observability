@@ -11,7 +11,7 @@ Repo root IS the Splunk package root. `default/`, `metadata/`, `static/` are at 
 - All config goes in `default/` only (no `local/`) for Splunk Cloud compatibility
 - Dashboards use Dashboard Studio v2 format (`<dashboard version="2">` with JSON CDATA)
 - Use base search + extend pattern to minimize search load
-- Macros are defined in the companion TA (`VisiCore_TA_AI_Observability`) and referenced here
+- Macros are defined in the companion TA ([VisiCore_TA_AI_Observability](https://github.com/JacobPEvans/VisiCore_TA_AI_Observability)) and referenced here
 
 ## Companion TA
 

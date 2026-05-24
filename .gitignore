@@ -3,3 +3,8 @@ build/
 *.tar.gz
 .DS_Store
 local/
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
