@@ -4,7 +4,7 @@ Splunk App package providing Dashboard Studio v2 dashboards for AI coding tool o
 
 ## Structure
 
-Repo root IS the Splunk package root. `default/`, `metadata/`, `static/` are at the top level.
+Repo root IS the Splunk package root. `default/`, `metadata/` are at the top level.
 
 ## Development Rules
 
