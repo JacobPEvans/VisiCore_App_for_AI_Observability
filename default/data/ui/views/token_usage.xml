@@ -1,94 +1,22 @@
 <dashboard version="2" theme="dark">
   <label>Token Usage</label>
-  <description>Detailed token consumption and efficiency analysis</description>
+  <description>Token mix deep dive across models and sessions</description>
   <definition><![CDATA[
 {
-  "dataSources": {
-    "ds_base": {
-      "type": "ds.search",
-      "options": {
-        "query": "`claude_assistant_events` | spath | `extract_tokens` | eval model='message.model'",
-        "queryParameters": {
-          "earliest": "$global_time.earliest$",
-          "latest": "$global_time.latest$"
+  "title": "Token Usage",
+  "description": "Token mix deep dive across models and sessions",
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": {
+          "queryParameters": {
+            "earliest": "$global_time.earliest$",
+            "latest": "$global_time.latest$"
+          }
         }
-      },
-      "name": "Base Token Events"
-    },
-    "ds_kpi_input": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| stats sum(input_tokens) as count | eval count=tostring(count,\"commas\")"
-      },
-      "name": "KPI Input Tokens"
-    },
-    "ds_kpi_output": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| stats sum(output_tokens) as count | eval count=tostring(count,\"commas\")"
-      },
-      "name": "KPI Output Tokens"
-    },
-    "ds_kpi_cache_read": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| stats sum(cache_read) as count | eval count=tostring(count,\"commas\")"
-      },
-      "name": "KPI Cache Read"
-    },
-    "ds_kpi_cache_create": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| stats sum(cache_created) as count | eval count=tostring(count,\"commas\")"
-      },
-      "name": "KPI Cache Created"
-    },
-    "ds_kpi_ratio": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| stats sum(input_tokens) as i, sum(output_tokens) as o | eval count=round(o/i, 2) | fields count"
-      },
-      "name": "KPI Output/Input Ratio"
-    },
-    "ds_tokens_time": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| timechart sum(input_tokens) as \"Input\", sum(output_tokens) as \"Output\", sum(cache_read) as \"Cache Read\", sum(cache_created) as \"Cache Created\""
-      },
-      "name": "Token Breakdown Over Time"
-    },
-    "ds_model_bar": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| stats sum(total_tokens) as tokens by model | sort - tokens | head 10 | rename model as \"Model\", tokens as \"Total Tokens\""
-      },
-      "name": "Top Models by Tokens"
-    },
-    "ds_session_table": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| stats sum(input_tokens) as input, sum(output_tokens) as output, sum(cache_read) as cache_rd, sum(cache_created) as cache_cr, sum(total_tokens) as total by sessionId | sort - total | head 20 | rename sessionId as \"Session\", input as \"Input\", output as \"Output\", cache_rd as \"Cache Read\", cache_cr as \"Cache Create\", total as \"Total\""
-      },
-      "name": "Sessions by Token Usage"
-    },
-    "ds_efficiency": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| timechart sum(output_tokens) as out, sum(input_tokens) as inp | eval ratio=round(out/inp, 3) | fields _time, ratio | rename ratio as \"Output/Input Ratio\""
-      },
-      "name": "Token Efficiency Over Time"
+      }
     }
   },
-  "defaults": {},
   "inputs": {
     "input_timerange": {
       "type": "input.timerange",
@@ -97,26 +25,136 @@
         "defaultValue": "-7d@d,now"
       },
       "title": "Time Range"
+    },
+    "input_model": {
+      "type": "input.dropdown",
+      "title": "Model",
+      "dataSources": {
+        "primary": "ds_model_options"
+      },
+      "options": {
+        "defaultValue": "*",
+        "items": ">frame(label, value) | prepend(formattedStatics) | objects()",
+        "token": "model_tok"
+      },
+      "context": {
+        "formattedConfig": {
+          "number": {
+            "prefix": ""
+          }
+        },
+        "formattedStatics": ">statics | formatByType(formattedConfig)",
+        "statics": [
+          ["All"],
+          ["*"]
+        ],
+        "label": ">primary | seriesByName(\"model\") | renameSeries(\"label\") | formatByType(formattedConfig)",
+        "value": ">primary | seriesByName(\"model\") | renameSeries(\"value\") | formatByType(formattedConfig)"
+      }
     }
   },
-  "layout": {
-    "type": "grid",
-    "options": {},
-    "structure": [
-      {"item": "viz_kpi_input", "type": "block", "position": {"x": 0, "y": 0, "w": 240, "h": 120}},
-      {"item": "viz_kpi_output", "type": "block", "position": {"x": 240, "y": 0, "w": 240, "h": 120}},
-      {"item": "viz_kpi_cache_read", "type": "block", "position": {"x": 480, "y": 0, "w": 240, "h": 120}},
-      {"item": "viz_kpi_cache_create", "type": "block", "position": {"x": 720, "y": 0, "w": 240, "h": 120}},
-      {"item": "viz_kpi_ratio", "type": "block", "position": {"x": 960, "y": 0, "w": 240, "h": 120}},
-      {"item": "viz_tokens_time", "type": "block", "position": {"x": 0, "y": 120, "w": 1200, "h": 300}},
-      {"item": "viz_model_bar", "type": "block", "position": {"x": 0, "y": 420, "w": 600, "h": 300}},
-      {"item": "viz_session_table", "type": "block", "position": {"x": 600, "y": 420, "w": 600, "h": 300}},
-      {"item": "viz_efficiency", "type": "block", "position": {"x": 0, "y": 720, "w": 1200, "h": 300}}
-    ],
-    "globalInputs": ["input_timerange"]
+  "dataSources": {
+    "ds_model_options": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_metric_events` | stats count by model | sort - count | fields model"
+      },
+      "name": "Model Options"
+    },
+    "ds_base_time": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_metric_events` | search model=$model_tok|s$ | timechart sum(input_tokens) as \"Input\", sum(output_tokens) as \"Output\", sum(cache_read_tokens) as \"Cache Read\", sum(cache_creation_tokens) as \"Cache Created\""
+      },
+      "name": "Base: Tokens Over Time"
+    },
+    "ds_kpi_input": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_time",
+        "query": "| stats sum(\"Input\") as count | eval count=tostring(count,\"commas\") | fields count"
+      },
+      "name": "KPI Input Tokens"
+    },
+    "ds_kpi_output": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_time",
+        "query": "| stats sum(\"Output\") as count | eval count=tostring(count,\"commas\") | fields count"
+      },
+      "name": "KPI Output Tokens"
+    },
+    "ds_kpi_cache_read": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_time",
+        "query": "| stats sum(\"Cache Read\") as count | eval count=tostring(count,\"commas\") | fields count"
+      },
+      "name": "KPI Cache Read"
+    },
+    "ds_kpi_cache_created": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_time",
+        "query": "| stats sum(\"Cache Created\") as count | eval count=tostring(count,\"commas\") | fields count"
+      },
+      "name": "KPI Cache Created"
+    },
+    "ds_kpi_ratio": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_time",
+        "query": "| stats sum(\"Output\") as o, sum(\"Input\") as i | eval count=if(i>0, round(o/i,2), \"n/a\") | fields count"
+      },
+      "name": "KPI Output/Input Ratio"
+    },
+    "ds_efficiency": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_time",
+        "query": "| eval \"Output/Input Ratio\"=if('Input'>0, round('Output'/'Input',3), null()) | fields _time, \"Output/Input Ratio\""
+      },
+      "name": "Output/Input Ratio Over Time"
+    },
+    "ds_base_model": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_metric_events` | search model=$model_tok|s$ | stats sum(input_tokens) as input, sum(output_tokens) as output, sum(cache_read_tokens) as cache_read, sum(cache_creation_tokens) as cache_created, sum(total_tokens) as total by model"
+      },
+      "name": "Base: Tokens by Model"
+    },
+    "ds_model_bar": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_model",
+        "query": "| sort - total | head 10 | fields model, total | rename model as \"Model\", total as \"Total Tokens\""
+      },
+      "name": "Top Models by Tokens"
+    },
+    "ds_model_mix": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_model",
+        "query": "| sort - total | head 10 | fields model, input, output, cache_read, cache_created | rename model as \"Model\", input as \"Input\", output as \"Output\", cache_read as \"Cache Read\", cache_created as \"Cache Created\""
+      },
+      "name": "Token Mix by Model"
+    },
+    "ds_base_session": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_metric_events` | search model=$model_tok|s$ | stats sum(total_tokens) as tokens, sum(input_tokens) as input, sum(output_tokens) as output, count as messages by sessionId"
+      },
+      "name": "Base: Tokens by Session"
+    },
+    "ds_session_table": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_session",
+        "query": "| sort - tokens | head 20 | rename sessionId as \"Session ID\", tokens as \"Total Tokens\", input as \"Input\", output as \"Output\", messages as \"Messages\""
+      },
+      "name": "Top Sessions by Tokens"
+    }
   },
-  "title": "Token Usage",
-  "description": "Detailed token consumption and efficiency analysis",
   "visualizations": {
     "viz_kpi_input": {
       "type": "splunk.singlevalue",
@@ -148,11 +186,11 @@
         "majorValue": "> primary | seriesByIndex(0)"
       }
     },
-    "viz_kpi_cache_create": {
+    "viz_kpi_cache_created": {
       "type": "splunk.singlevalue",
       "title": "Cache Created",
       "dataSources": {
-        "primary": "ds_kpi_cache_create"
+        "primary": "ds_kpi_cache_created"
       },
       "options": {
         "majorValue": "> primary | seriesByIndex(0)"
@@ -168,11 +206,21 @@
         "majorValue": "> primary | seriesByIndex(0)"
       }
     },
-    "viz_tokens_time": {
+    "viz_token_breakdown": {
       "type": "splunk.area",
       "title": "Token Breakdown Over Time",
       "dataSources": {
-        "primary": "ds_tokens_time"
+        "primary": "ds_base_time"
+      },
+      "options": {
+        "stackMode": "stacked"
+      }
+    },
+    "viz_efficiency": {
+      "type": "splunk.line",
+      "title": "Output/Input Ratio Over Time",
+      "dataSources": {
+        "primary": "ds_efficiency"
       },
       "options": {}
     },
@@ -182,27 +230,58 @@
       "dataSources": {
         "primary": "ds_model_bar"
       },
+      "options": {}
+    },
+    "viz_model_mix": {
+      "type": "splunk.column",
+      "title": "Token Mix by Model",
+      "dataSources": {
+        "primary": "ds_model_mix"
+      },
       "options": {
-        "xField": "> primary | seriesByName('Total Tokens')",
-        "yField": "> primary | seriesByName('Model')"
+        "stackMode": "stacked"
       }
     },
     "viz_session_table": {
       "type": "splunk.table",
-      "title": "Sessions by Token Usage",
+      "title": "Top Sessions by Tokens",
       "dataSources": {
         "primary": "ds_session_table"
       },
-      "options": {}
-    },
-    "viz_efficiency": {
-      "type": "splunk.line",
-      "title": "Token Efficiency Over Time",
-      "dataSources": {
-        "primary": "ds_efficiency"
-      },
-      "options": {}
+      "options": {},
+      "eventHandlers": [
+        {
+          "type": "drilldown.linkToDashboard",
+          "options": {
+            "app": "VisiCore_App_for_AI_Observability",
+            "dashboard": "sessions",
+            "tokens": [
+              {
+                "token": "form.session_tok",
+                "value": "row.Session ID.value"
+              }
+            ]
+          }
+        }
+      ]
     }
+  },
+  "layout": {
+    "type": "grid",
+    "options": {},
+    "structure": [
+      {"item": "viz_kpi_input", "type": "block", "position": {"x": 0, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_kpi_output", "type": "block", "position": {"x": 240, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_kpi_cache_read", "type": "block", "position": {"x": 480, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_kpi_cache_created", "type": "block", "position": {"x": 720, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_kpi_ratio", "type": "block", "position": {"x": 960, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_token_breakdown", "type": "block", "position": {"x": 0, "y": 120, "w": 600, "h": 300}},
+      {"item": "viz_efficiency", "type": "block", "position": {"x": 600, "y": 120, "w": 600, "h": 300}},
+      {"item": "viz_model_bar", "type": "block", "position": {"x": 0, "y": 420, "w": 600, "h": 300}},
+      {"item": "viz_model_mix", "type": "block", "position": {"x": 600, "y": 420, "w": 600, "h": 300}},
+      {"item": "viz_session_table", "type": "block", "position": {"x": 0, "y": 720, "w": 1200, "h": 320}}
+    ],
+    "globalInputs": ["input_timerange", "input_model"]
   }
 }
   ]]></definition>

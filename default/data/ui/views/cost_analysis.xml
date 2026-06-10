@@ -1,168 +1,20 @@
 <dashboard version="2" theme="dark">
   <label>Cost Analysis</label>
-  <description>Dollar cost estimation for AI API usage by model, session, and project.</description>
+  <description>Lookup-driven spend tracking with unpriced-model visibility</description>
   <definition><![CDATA[
 {
-  "dataSources": {
-    "ds_base": {
-      "type": "ds.search",
-      "options": {
-        "query": "`claude_assistant_events` | spath | `calculate_cost`",
-        "queryParameters": {
-          "earliest": "$global_time.earliest$",
-          "latest": "$global_time.latest$"
+  "title": "Cost Analysis",
+  "description": "Lookup-driven spend tracking with unpriced-model visibility",
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": {
+          "queryParameters": {
+            "earliest": "$global_time.earliest$",
+            "latest": "$global_time.latest$"
+          }
         }
-      },
-      "name": "Base Cost Data"
-    },
-    "ds_kpi_total_cost": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| stats sum(cost_usd) as count | eval count=\"$\".round(count,2)"
-      },
-      "name": "Total Cost"
-    },
-    "ds_kpi_daily_avg": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| timechart span=1d sum(cost_usd) as daily | stats avg(daily) as count | eval count=\"$\".round(count,2)"
-      },
-      "name": "Daily Average Cost"
-    },
-    "ds_kpi_max_session": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| stats sum(cost_usd) as session_cost by sessionId | stats max(session_cost) as count | eval count=\"$\".round(count,2)"
-      },
-      "name": "Most Expensive Session"
-    },
-    "ds_kpi_cost_per_msg": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| stats sum(cost_usd) as total_cost, count as msgs | eval count=\"$\".round(total_cost/msgs,4)"
-      },
-      "name": "Cost Per Message"
-    },
-    "ds_daily_trend": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| timechart span=1d sum(cost_usd) as \"Daily Cost (USD)\""
-      },
-      "name": "Daily Cost Trend"
-    },
-    "ds_model_cost": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| stats sum(cost_usd) as cost by model | sort - cost | eval cost=round(cost,2) | rename model as \"Model\", cost as \"Cost (USD)\""
-      },
-      "name": "Cost by Model"
-    },
-    "ds_project_cost": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| eval cwd=coalesce(cwd,\"unknown\") | where cwd!=\"unknown\" | stats sum(cost_usd) as cost by cwd | sort - cost | head 15 | eval cost=round(cost,2) | rename cwd as \"Project\", cost as \"Cost (USD)\""
-      },
-      "name": "Cost by Project"
-    },
-    "ds_session_cost": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| stats sum(cost_usd) as cost, count as messages, sum(total_tokens) as tokens, latest(cwd) as project by sessionId | eval cost=round(cost,4) | sort - cost | head 25 | rename sessionId as \"Session\", cost as \"Cost (USD)\", messages as \"Messages\", tokens as \"Tokens\", project as \"Project\""
-      },
-      "name": "Top Sessions by Cost"
-    },
-    "ds_cumulative": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| timechart span=1d sum(cost_usd) as daily_cost | streamstats sum(daily_cost) as \"Cumulative Cost (USD)\" | fields _time, \"Cumulative Cost (USD)\""
-      },
-      "name": "Cumulative Cost Over Time"
-    }
-  },
-  "visualizations": {
-    "viz_kpi_total_cost": {
-      "type": "splunk.singlevalue",
-      "options": {
-        "majorValue": "> primary | seriesByIndex(0)"
-      },
-      "dataSources": {
-        "primary": "ds_kpi_total_cost"
-      },
-      "title": "Total Cost"
-    },
-    "viz_kpi_daily_avg": {
-      "type": "splunk.singlevalue",
-      "options": {
-        "majorValue": "> primary | seriesByIndex(0)"
-      },
-      "dataSources": {
-        "primary": "ds_kpi_daily_avg"
-      },
-      "title": "Daily Average"
-    },
-    "viz_kpi_max_session": {
-      "type": "splunk.singlevalue",
-      "options": {
-        "majorValue": "> primary | seriesByIndex(0)"
-      },
-      "dataSources": {
-        "primary": "ds_kpi_max_session"
-      },
-      "title": "Most Expensive Session"
-    },
-    "viz_kpi_cost_per_msg": {
-      "type": "splunk.singlevalue",
-      "options": {
-        "majorValue": "> primary | seriesByIndex(0)"
-      },
-      "dataSources": {
-        "primary": "ds_kpi_cost_per_msg"
-      },
-      "title": "Cost Per Message"
-    },
-    "viz_daily_trend": {
-      "type": "splunk.area",
-      "dataSources": {
-        "primary": "ds_daily_trend"
-      },
-      "title": "Daily Cost Trend"
-    },
-    "viz_model_cost": {
-      "type": "splunk.pie",
-      "dataSources": {
-        "primary": "ds_model_cost"
-      },
-      "title": "Cost by Model"
-    },
-    "viz_project_cost": {
-      "type": "splunk.bar",
-      "dataSources": {
-        "primary": "ds_project_cost"
-      },
-      "title": "Cost by Project"
-    },
-    "viz_session_cost": {
-      "type": "splunk.table",
-      "dataSources": {
-        "primary": "ds_session_cost"
-      },
-      "title": "Top Sessions by Cost"
-    },
-    "viz_cumulative": {
-      "type": "splunk.line",
-      "dataSources": {
-        "primary": "ds_cumulative"
-      },
-      "title": "Cumulative Cost Over Time"
+      }
     }
   },
   "inputs": {
@@ -173,23 +25,291 @@
         "defaultValue": "-7d@d,now"
       },
       "title": "Time Range"
+    },
+    "input_model": {
+      "type": "input.dropdown",
+      "title": "Model",
+      "dataSources": {
+        "primary": "ds_model_options"
+      },
+      "options": {
+        "defaultValue": "*",
+        "items": ">frame(label, value) | prepend(formattedStatics) | objects()",
+        "token": "model_tok"
+      },
+      "context": {
+        "formattedConfig": {
+          "number": {
+            "prefix": ""
+          }
+        },
+        "formattedStatics": ">statics | formatByType(formattedConfig)",
+        "statics": [
+          ["All"],
+          ["*"]
+        ],
+        "label": ">primary | seriesByName(\"model\") | renameSeries(\"label\") | formatByType(formattedConfig)",
+        "value": ">primary | seriesByName(\"model\") | renameSeries(\"value\") | formatByType(formattedConfig)"
+      }
+    }
+  },
+  "dataSources": {
+    "ds_model_options": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_metric_events` | stats count by model | sort - count | fields model"
+      },
+      "name": "Model Options"
+    },
+    "ds_base_daily": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_metric_events` | search model=$model_tok|s$ | timechart span=1d sum(cost_usd) as daily_cost, count as messages, sum(eval(if(pricing_known=\"false\",1,0))) as unpriced_msgs"
+      },
+      "name": "Base: Daily Cost"
+    },
+    "ds_kpi_total": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_daily",
+        "query": "| stats sum(daily_cost) as count | eval count=\"$\".tostring(round(count,2),\"commas\") | fields count"
+      },
+      "name": "KPI Total Cost"
+    },
+    "ds_kpi_daily_avg": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_daily",
+        "query": "| stats avg(daily_cost) as count | eval count=\"$\".tostring(round(count,2),\"commas\") | fields count"
+      },
+      "name": "KPI Daily Average"
+    },
+    "ds_kpi_cost_per_msg": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_daily",
+        "query": "| stats sum(daily_cost) as c, sum(messages) as m | eval count=if(m>0, \"$\".round(c/m,4), \"n/a\") | fields count"
+      },
+      "name": "KPI Cost per Message"
+    },
+    "ds_kpi_unpriced": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_daily",
+        "query": "| stats sum(unpriced_msgs) as count | fields count"
+      },
+      "name": "KPI Unpriced Messages"
+    },
+    "ds_daily_trend": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_daily",
+        "query": "| fields _time, daily_cost | rename daily_cost as \"Daily Cost (USD)\""
+      },
+      "name": "Daily Cost Trend"
+    },
+    "ds_cumulative": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_daily",
+        "query": "| streamstats sum(daily_cost) as cumulative | eval cumulative=round(cumulative,2) | fields _time, cumulative | rename cumulative as \"Cumulative Cost (USD)\""
+      },
+      "name": "Cumulative Cost"
+    },
+    "ds_base_model": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_metric_events` | search model=$model_tok|s$ | stats sum(cost_usd) as cost, count as messages by model, pricing_known"
+      },
+      "name": "Base: Cost by Model"
+    },
+    "ds_model_pie": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_model",
+        "query": "| stats sum(cost) as cost by model | sort - cost | eval cost=round(cost,2)"
+      },
+      "name": "Cost by Model"
+    },
+    "ds_unknown_models": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_model",
+        "query": "| where pricing_known=\"false\" | stats sum(messages) as Messages by model | sort - Messages | rename model as \"Unpriced Model\""
+      },
+      "name": "Unpriced Models"
+    },
+    "ds_base_session": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_metric_events` | search model=$model_tok|s$ | stats sum(cost_usd) as cost, count as messages, sum(total_tokens) as tokens, latest(cwd) as project by sessionId"
+      },
+      "name": "Base: Cost by Session"
+    },
+    "ds_kpi_max_session": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_session",
+        "query": "| stats max(cost) as count | eval count=\"$\".round(count,2) | fields count"
+      },
+      "name": "KPI Most Expensive Session"
+    },
+    "ds_session_table": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_session",
+        "query": "| eval cost=round(cost,4) | sort - cost | head 25 | rename sessionId as \"Session ID\", cost as \"Cost (USD)\", messages as \"Messages\", tokens as \"Total Tokens\", project as \"Project\""
+      },
+      "name": "Top Sessions by Cost"
+    },
+    "ds_project_cost": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_session",
+        "query": "| where isnotnull(project) | stats sum(cost) as cost by project | sort - cost | head 15 | eval cost=round(cost,2) | rename project as \"Project\", cost as \"Cost (USD)\""
+      },
+      "name": "Cost by Project"
+    }
+  },
+  "visualizations": {
+    "viz_kpi_total": {
+      "type": "splunk.singlevalue",
+      "title": "Total Cost",
+      "dataSources": {
+        "primary": "ds_kpi_total"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_kpi_daily_avg": {
+      "type": "splunk.singlevalue",
+      "title": "Daily Avg",
+      "dataSources": {
+        "primary": "ds_kpi_daily_avg"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_kpi_cost_per_msg": {
+      "type": "splunk.singlevalue",
+      "title": "Cost/Message",
+      "dataSources": {
+        "primary": "ds_kpi_cost_per_msg"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_kpi_max_session": {
+      "type": "splunk.singlevalue",
+      "title": "Most Expensive Session",
+      "dataSources": {
+        "primary": "ds_kpi_max_session"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_kpi_unpriced": {
+      "type": "splunk.singlevalue",
+      "title": "Unpriced Messages",
+      "dataSources": {
+        "primary": "ds_kpi_unpriced"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)",
+        "majorColor": "> majorValue | rangeValue(unpricedColors)"
+      },
+      "context": {
+        "unpricedColors": [
+          {"value": "#118832", "to": 1},
+          {"value": "#D41F1F", "from": 1}
+        ]
+      }
+    },
+    "viz_daily_trend": {
+      "type": "splunk.area",
+      "title": "Daily Cost Trend",
+      "dataSources": {
+        "primary": "ds_daily_trend"
+      },
+      "options": {}
+    },
+    "viz_cumulative": {
+      "type": "splunk.line",
+      "title": "Cumulative Cost",
+      "dataSources": {
+        "primary": "ds_cumulative"
+      },
+      "options": {}
+    },
+    "viz_model_pie": {
+      "type": "splunk.pie",
+      "title": "Cost by Model",
+      "dataSources": {
+        "primary": "ds_model_pie"
+      },
+      "options": {}
+    },
+    "viz_project_bar": {
+      "type": "splunk.bar",
+      "title": "Cost by Project",
+      "dataSources": {
+        "primary": "ds_project_cost"
+      },
+      "options": {}
+    },
+    "viz_unpriced_models": {
+      "type": "splunk.table",
+      "title": "Unpriced Models",
+      "dataSources": {
+        "primary": "ds_unknown_models"
+      },
+      "options": {}
+    },
+    "viz_session_table": {
+      "type": "splunk.table",
+      "title": "Top Sessions by Cost",
+      "dataSources": {
+        "primary": "ds_session_table"
+      },
+      "options": {},
+      "eventHandlers": [
+        {
+          "type": "drilldown.linkToDashboard",
+          "options": {
+            "app": "VisiCore_App_for_AI_Observability",
+            "dashboard": "sessions",
+            "tokens": [
+              {
+                "token": "form.session_tok",
+                "value": "row.Session ID.value"
+              }
+            ]
+          }
+        }
+      ]
     }
   },
   "layout": {
     "type": "grid",
     "options": {},
     "structure": [
-      {"item": "viz_kpi_total_cost", "type": "block", "position": {"x": 0, "y": 0, "w": 300, "h": 120}},
-      {"item": "viz_kpi_daily_avg", "type": "block", "position": {"x": 300, "y": 0, "w": 300, "h": 120}},
-      {"item": "viz_kpi_max_session", "type": "block", "position": {"x": 600, "y": 0, "w": 300, "h": 120}},
-      {"item": "viz_kpi_cost_per_msg", "type": "block", "position": {"x": 900, "y": 0, "w": 300, "h": 120}},
+      {"item": "viz_kpi_total", "type": "block", "position": {"x": 0, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_kpi_daily_avg", "type": "block", "position": {"x": 240, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_kpi_cost_per_msg", "type": "block", "position": {"x": 480, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_kpi_max_session", "type": "block", "position": {"x": 720, "y": 0, "w": 240, "h": 120}},
+      {"item": "viz_kpi_unpriced", "type": "block", "position": {"x": 960, "y": 0, "w": 240, "h": 120}},
       {"item": "viz_daily_trend", "type": "block", "position": {"x": 0, "y": 120, "w": 600, "h": 300}},
-      {"item": "viz_model_cost", "type": "block", "position": {"x": 600, "y": 120, "w": 600, "h": 300}},
-      {"item": "viz_project_cost", "type": "block", "position": {"x": 0, "y": 420, "w": 600, "h": 300}},
-      {"item": "viz_session_cost", "type": "block", "position": {"x": 600, "y": 420, "w": 600, "h": 300}},
-      {"item": "viz_cumulative", "type": "block", "position": {"x": 0, "y": 720, "w": 1200, "h": 300}}
+      {"item": "viz_cumulative", "type": "block", "position": {"x": 600, "y": 120, "w": 600, "h": 300}},
+      {"item": "viz_model_pie", "type": "block", "position": {"x": 0, "y": 420, "w": 400, "h": 300}},
+      {"item": "viz_project_bar", "type": "block", "position": {"x": 400, "y": 420, "w": 400, "h": 300}},
+      {"item": "viz_unpriced_models", "type": "block", "position": {"x": 800, "y": 420, "w": 400, "h": 300}},
+      {"item": "viz_session_table", "type": "block", "position": {"x": 0, "y": 720, "w": 1200, "h": 320}}
     ],
-    "globalInputs": ["input_timerange"]
+    "globalInputs": ["input_timerange", "input_model"]
   }
 }
   ]]></definition>

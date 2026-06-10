@@ -1,120 +1,20 @@
 <dashboard version="2" theme="dark">
   <label>Sessions</label>
-  <description>Session-level analysis including message counts, token usage, and project activity.</description>
+  <description>Per-session activity, duration, and drill-down filtering</description>
   <definition><![CDATA[
 {
-  "dataSources": {
-    "ds_base": {
-      "type": "ds.search",
-      "options": {
-        "query": "`claude_all_session_events` | spath | `extract_tokens` | eval model='message.model'",
-        "queryParameters": {
-          "earliest": "$global_time.earliest$",
-          "latest": "$global_time.latest$"
+  "title": "Sessions",
+  "description": "Per-session activity, duration, and drill-down filtering",
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": {
+          "queryParameters": {
+            "earliest": "$global_time.earliest$",
+            "latest": "$global_time.latest$"
+          }
         }
-      },
-      "name": "Base Session Data"
-    },
-    "ds_kpi_sessions": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| stats dc(sessionId) as count"
-      },
-      "name": "Total Sessions"
-    },
-    "ds_kpi_avg_msgs": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| stats count as msgs by sessionId | stats avg(msgs) as count | eval count=round(count,1)"
-      },
-      "name": "Avg Messages Per Session"
-    },
-    "ds_kpi_avg_tokens": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| stats sum(total_tokens) as tokens by sessionId | stats avg(tokens) as count | eval count=tostring(round(count,0),\"commas\")"
-      },
-      "name": "Avg Tokens Per Session"
-    },
-    "ds_session_table": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| stats count as messages, sum(total_tokens) as tokens, values(model) as models, latest(cwd) as project, min(_time) as started, max(_time) as ended by sessionId | eval duration=ended-started | eval duration_min=round(duration/60,1) | sort - messages | rename sessionId as \"Session\", messages as \"Messages\", tokens as \"Total Tokens\", models as \"Models\", project as \"Project\", duration_min as \"Duration (min)\""
-      },
-      "name": "Session Detail"
-    },
-    "ds_sessions_time": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| timechart dc(sessionId) as \"Sessions\""
-      },
-      "name": "Sessions Over Time"
-    },
-    "ds_sessions_project": {
-      "type": "ds.search",
-      "options": {
-        "extend": "ds_base",
-        "query": "| eval cwd=coalesce(cwd,\"unknown\") | where cwd!=\"unknown\" | stats dc(sessionId) as sessions by cwd | sort - sessions | head 15 | rename cwd as \"Project\", sessions as \"Sessions\""
-      },
-      "name": "Sessions by Project"
-    }
-  },
-  "visualizations": {
-    "viz_kpi_sessions": {
-      "type": "splunk.singlevalue",
-      "options": {
-        "majorValue": "> primary | seriesByIndex(0)"
-      },
-      "dataSources": {
-        "primary": "ds_kpi_sessions"
-      },
-      "title": "Total Sessions"
-    },
-    "viz_kpi_avg_msgs": {
-      "type": "splunk.singlevalue",
-      "options": {
-        "majorValue": "> primary | seriesByIndex(0)"
-      },
-      "dataSources": {
-        "primary": "ds_kpi_avg_msgs"
-      },
-      "title": "Avg Messages/Session"
-    },
-    "viz_kpi_avg_tokens": {
-      "type": "splunk.singlevalue",
-      "options": {
-        "majorValue": "> primary | seriesByIndex(0)"
-      },
-      "dataSources": {
-        "primary": "ds_kpi_avg_tokens"
-      },
-      "title": "Avg Tokens/Session"
-    },
-    "viz_session_table": {
-      "type": "splunk.table",
-      "dataSources": {
-        "primary": "ds_session_table"
-      },
-      "title": "Session Detail"
-    },
-    "viz_sessions_time": {
-      "type": "splunk.area",
-      "dataSources": {
-        "primary": "ds_sessions_time"
-      },
-      "title": "Sessions Over Time"
-    },
-    "viz_sessions_project": {
-      "type": "splunk.bar",
-      "dataSources": {
-        "primary": "ds_sessions_project"
-      },
-      "title": "Sessions by Project"
+      }
     }
   },
   "inputs": {
@@ -125,20 +25,202 @@
         "defaultValue": "-7d@d,now"
       },
       "title": "Time Range"
+    },
+    "input_project": {
+      "type": "input.dropdown",
+      "title": "Project",
+      "dataSources": {
+        "primary": "ds_project_options"
+      },
+      "options": {
+        "defaultValue": "*",
+        "items": ">frame(label, value) | prepend(formattedStatics) | objects()",
+        "token": "project_tok"
+      },
+      "context": {
+        "formattedConfig": {
+          "number": {
+            "prefix": ""
+          }
+        },
+        "formattedStatics": ">statics | formatByType(formattedConfig)",
+        "statics": [["All"], ["*"]],
+        "label": ">primary | seriesByName(\"cwd\") | renameSeries(\"label\") | formatByType(formattedConfig)",
+        "value": ">primary | seriesByName(\"cwd\") | renameSeries(\"value\") | formatByType(formattedConfig)"
+      }
+    },
+    "input_session": {
+      "type": "input.text",
+      "title": "Session ID",
+      "options": {
+        "token": "session_tok",
+        "defaultValue": "*"
+      }
+    }
+  },
+  "dataSources": {
+    "ds_project_options": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_all_session_events` | stats count by cwd | sort - count | fields cwd"
+      },
+      "name": "Project Options"
+    },
+    "ds_base_session": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_all_session_events` | `dedup_messages` | `extract_tokens` | search sessionId=$session_tok|s$ cwd=$project_tok|s$ | stats count as messages, sum(total_tokens) as tokens, values(model) as models, latest(cwd) as project, min(_time) as started, max(_time) as ended by sessionId | eval duration_min=round((ended-started)/60,1)"
+      },
+      "name": "Base: Per-Session Stats"
+    },
+    "ds_kpi_sessions": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_session",
+        "query": "| stats count | fields count"
+      },
+      "name": "KPI Sessions"
+    },
+    "ds_kpi_avg_msgs": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_session",
+        "query": "| stats avg(messages) as count | eval count=round(count,1) | fields count"
+      },
+      "name": "KPI Avg Messages/Session"
+    },
+    "ds_kpi_avg_tokens": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_session",
+        "query": "| stats avg(tokens) as count | eval count=tostring(round(count,0),\"commas\") | fields count"
+      },
+      "name": "KPI Avg Tokens/Session"
+    },
+    "ds_kpi_avg_duration": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_session",
+        "query": "| stats avg(duration_min) as count | eval count=round(count,1).\" min\" | fields count"
+      },
+      "name": "KPI Avg Duration"
+    },
+    "ds_session_table": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_session",
+        "query": "| eval started_str=strftime(started,\"%Y-%m-%d %H:%M\"), tokens=tostring(tokens,\"commas\") | sort - ended | head 50 | fields sessionId, project, messages, tokens, models, started_str, duration_min | rename sessionId as \"Session ID\", project as \"Project\", messages as \"Messages\", tokens as \"Total Tokens\", models as \"Models\", started_str as \"Started\", duration_min as \"Duration (min)\""
+      },
+      "name": "Session Detail"
+    },
+    "ds_project_bar": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_session",
+        "query": "| where isnotnull(project) | stats count as Sessions by project | sort - Sessions | head 15 | rename project as \"Project\""
+      },
+      "name": "Sessions by Project"
+    },
+    "ds_base_active_time": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_all_session_events` | `dedup_messages` | search sessionId=$session_tok|s$ cwd=$project_tok|s$ | timechart dc(sessionId) as \"Active Sessions\""
+      },
+      "name": "Base: Active Sessions Over Time"
+    }
+  },
+  "visualizations": {
+    "viz_kpi_sessions": {
+      "type": "splunk.singlevalue",
+      "title": "Sessions",
+      "dataSources": {
+        "primary": "ds_kpi_sessions"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_kpi_avg_msgs": {
+      "type": "splunk.singlevalue",
+      "title": "Avg Messages/Session",
+      "dataSources": {
+        "primary": "ds_kpi_avg_msgs"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_kpi_avg_tokens": {
+      "type": "splunk.singlevalue",
+      "title": "Avg Tokens/Session",
+      "dataSources": {
+        "primary": "ds_kpi_avg_tokens"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_kpi_avg_duration": {
+      "type": "splunk.singlevalue",
+      "title": "Avg Duration",
+      "dataSources": {
+        "primary": "ds_kpi_avg_duration"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_active_time": {
+      "type": "splunk.area",
+      "title": "Active Sessions Over Time",
+      "dataSources": {
+        "primary": "ds_base_active_time"
+      },
+      "options": {}
+    },
+    "viz_project_bar": {
+      "type": "splunk.bar",
+      "title": "Sessions by Project",
+      "dataSources": {
+        "primary": "ds_project_bar"
+      },
+      "options": {}
+    },
+    "viz_session_table": {
+      "type": "splunk.table",
+      "title": "Session Detail",
+      "dataSources": {
+        "primary": "ds_session_table"
+      },
+      "options": {},
+      "eventHandlers": [
+        {
+          "type": "drilldown.setToken",
+          "options": {
+            "tokens": [
+              {
+                "token": "session_tok",
+                "value": "row.Session ID.value"
+              }
+            ]
+          }
+        }
+      ]
     }
   },
   "layout": {
     "type": "grid",
     "options": {},
     "structure": [
-      {"item": "viz_kpi_sessions", "type": "block", "position": {"x": 0, "y": 0, "w": 400, "h": 120}},
-      {"item": "viz_kpi_avg_msgs", "type": "block", "position": {"x": 400, "y": 0, "w": 400, "h": 120}},
-      {"item": "viz_kpi_avg_tokens", "type": "block", "position": {"x": 800, "y": 0, "w": 400, "h": 120}},
-      {"item": "viz_session_table", "type": "block", "position": {"x": 0, "y": 120, "w": 1200, "h": 300}},
-      {"item": "viz_sessions_time", "type": "block", "position": {"x": 0, "y": 420, "w": 600, "h": 300}},
-      {"item": "viz_sessions_project", "type": "block", "position": {"x": 600, "y": 420, "w": 600, "h": 300}}
+      {"item": "viz_kpi_sessions", "type": "block", "position": {"x": 0, "y": 0, "w": 300, "h": 120}},
+      {"item": "viz_kpi_avg_msgs", "type": "block", "position": {"x": 300, "y": 0, "w": 300, "h": 120}},
+      {"item": "viz_kpi_avg_tokens", "type": "block", "position": {"x": 600, "y": 0, "w": 300, "h": 120}},
+      {"item": "viz_kpi_avg_duration", "type": "block", "position": {"x": 900, "y": 0, "w": 300, "h": 120}},
+      {"item": "viz_active_time", "type": "block", "position": {"x": 0, "y": 120, "w": 700, "h": 300}},
+      {"item": "viz_project_bar", "type": "block", "position": {"x": 700, "y": 120, "w": 500, "h": 300}},
+      {"item": "viz_session_table", "type": "block", "position": {"x": 0, "y": 420, "w": 1200, "h": 360}}
     ],
-    "globalInputs": ["input_timerange"]
+    "globalInputs": ["input_timerange", "input_project", "input_session"]
   }
 }
   ]]></definition>
