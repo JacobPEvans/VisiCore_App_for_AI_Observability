@@ -1,0 +1,239 @@
+<dashboard version="2" theme="dark">
+  <label>AI Overview</label>
+  <description>Cross-provider AI observability landing page</description>
+  <definition><![CDATA[
+{
+  "title": "AI Overview",
+  "description": "Single pane across Anthropic, Google, and GitHub Copilot AI telemetry",
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": {
+          "queryParameters": {
+            "earliest": "$global_time.earliest$",
+            "latest": "$global_time.latest$"
+          }
+        }
+      }
+    }
+  },
+  "inputs": {
+    "input_timerange": {
+      "type": "input.timerange",
+      "options": {
+        "token": "global_time",
+        "defaultValue": "-7d@d,now"
+      },
+      "title": "Time Range"
+    }
+  },
+  "dataSources": {
+    "ds_claude_kpis": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_metric_events` | stats count as messages, dc(sessionId) as sessions, sum(total_tokens) as tokens, sum(cost_usd) as cost | fillnull value=0 messages sessions tokens cost"
+      },
+      "name": "Base: Claude KPIs"
+    },
+    "ds_kpi_claude_messages": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_claude_kpis",
+        "query": "| fields messages"
+      },
+      "name": "Claude Messages"
+    },
+    "ds_kpi_claude_sessions": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_claude_kpis",
+        "query": "| fields sessions"
+      },
+      "name": "Claude Sessions"
+    },
+    "ds_kpi_claude_tokens": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_claude_kpis",
+        "query": "| eval tokens=tostring(tokens, \"commas\") | fields tokens"
+      },
+      "name": "Claude Tokens"
+    },
+    "ds_kpi_claude_cost": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_claude_kpis",
+        "query": "| eval cost=\"$\".tostring(round(cost, 2), \"commas\") | fields cost"
+      },
+      "name": "Claude Cost"
+    },
+    "ds_gemini_kpi": {
+      "type": "ds.search",
+      "options": {
+        "query": "`gemini_index` | stats count as events | fields events"
+      },
+      "name": "Gemini/Antigravity Events"
+    },
+    "ds_copilot_kpi": {
+      "type": "ds.search",
+      "options": {
+        "query": "`copilot_index` | stats count as events | fields events"
+      },
+      "name": "Copilot/VS Code Events"
+    },
+    "ds_provider_time": {
+      "type": "ds.search",
+      "options": {
+        "query": "`ai_all_indexes` | eval provider=coalesce('gen_ai.provider.name', vendor, \"unknown\") | timechart count by provider"
+      },
+      "name": "Activity by Provider"
+    },
+    "ds_provider_status": {
+      "type": "ds.search",
+      "options": {
+        "query": "`ai_all_indexes` | eval provider=coalesce('gen_ai.provider.name', vendor, \"unknown\") | stats count as events, max(_time) as last_epoch by provider | append [| makeresults format=csv data=\"provider\nanthropic\ngoogle\ngithub\"] | stats sum(events) as events, max(last_epoch) as last_epoch by provider | fillnull value=0 events | eval status=if(events>0, \"Active\", \"No data\"), last_seen=if(events>0, strftime(last_epoch, \"%Y-%m-%d %H:%M\"), \"-\") | sort provider | fields provider, status, events, last_seen | rename provider as \"Provider\", status as \"Status\", events as \"Events\", last_seen as \"Last Seen\""
+      },
+      "name": "Provider Status"
+    }
+  },
+  "visualizations": {
+    "viz_kpi_claude_messages": {
+      "type": "splunk.singlevalue",
+      "title": "Claude Messages",
+      "dataSources": {
+        "primary": "ds_kpi_claude_messages"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      },
+      "eventHandlers": [
+        {
+          "type": "drilldown.linkToDashboard",
+          "options": {
+            "app": "VisiCore_App_for_AI_Observability",
+            "dashboard": "overview"
+          }
+        }
+      ]
+    },
+    "viz_kpi_claude_sessions": {
+      "type": "splunk.singlevalue",
+      "title": "Claude Sessions",
+      "dataSources": {
+        "primary": "ds_kpi_claude_sessions"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      },
+      "eventHandlers": [
+        {
+          "type": "drilldown.linkToDashboard",
+          "options": {
+            "app": "VisiCore_App_for_AI_Observability",
+            "dashboard": "sessions"
+          }
+        }
+      ]
+    },
+    "viz_kpi_claude_tokens": {
+      "type": "splunk.singlevalue",
+      "title": "Claude Tokens",
+      "dataSources": {
+        "primary": "ds_kpi_claude_tokens"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      },
+      "eventHandlers": [
+        {
+          "type": "drilldown.linkToDashboard",
+          "options": {
+            "app": "VisiCore_App_for_AI_Observability",
+            "dashboard": "token_usage"
+          }
+        }
+      ]
+    },
+    "viz_kpi_claude_cost": {
+      "type": "splunk.singlevalue",
+      "title": "Claude Est. Cost",
+      "dataSources": {
+        "primary": "ds_kpi_claude_cost"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      },
+      "eventHandlers": [
+        {
+          "type": "drilldown.linkToDashboard",
+          "options": {
+            "app": "VisiCore_App_for_AI_Observability",
+            "dashboard": "cost_analysis"
+          }
+        }
+      ]
+    },
+    "viz_kpi_gemini": {
+      "type": "splunk.singlevalue",
+      "title": "Gemini/Antigravity Events",
+      "dataSources": {
+        "primary": "ds_gemini_kpi"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_kpi_copilot": {
+      "type": "splunk.singlevalue",
+      "title": "Copilot/VS Code Events",
+      "dataSources": {
+        "primary": "ds_copilot_kpi"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0)"
+      }
+    },
+    "viz_provider_time": {
+      "type": "splunk.area",
+      "title": "Activity by Provider",
+      "dataSources": {
+        "primary": "ds_provider_time"
+      },
+      "options": {
+        "stackMode": "stacked"
+      }
+    },
+    "viz_provider_status": {
+      "type": "splunk.table",
+      "title": "Provider Status",
+      "dataSources": {
+        "primary": "ds_provider_status"
+      },
+      "options": {}
+    },
+    "viz_onboarding": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "**Onboarding data feeds** — each provider lights up automatically once its Cribl pack delivers events:\n\n- **Anthropic (Claude Code)**: `cc-edge-claude-code-otel` -> index `claude`, sourcetypes `claude:code:*`\n- **Google (Gemini CLI / Antigravity)**: `cc-edge-gemini-antigravity-io` -> index `gemini`, sourcetypes `gemini:cli:*` / `antigravity:*`\n- **GitHub Copilot / VS Code**: `cc-edge-copilot-otel`, `cc-edge-vscode-io`, `cc-stream-github-copilot-rest-io` -> index `vscode`\n\nIndex locations are configurable via the TA's `claude_index` / `gemini_index` / `copilot_index` / `openai_index` macros."
+      }
+    }
+  },
+  "layout": {
+    "type": "grid",
+    "options": {},
+    "structure": [
+      {"item": "viz_kpi_claude_messages", "type": "block", "position": {"x": 0, "y": 0, "w": 200, "h": 120}},
+      {"item": "viz_kpi_claude_sessions", "type": "block", "position": {"x": 200, "y": 0, "w": 200, "h": 120}},
+      {"item": "viz_kpi_claude_tokens", "type": "block", "position": {"x": 400, "y": 0, "w": 200, "h": 120}},
+      {"item": "viz_kpi_claude_cost", "type": "block", "position": {"x": 600, "y": 0, "w": 200, "h": 120}},
+      {"item": "viz_kpi_gemini", "type": "block", "position": {"x": 800, "y": 0, "w": 200, "h": 120}},
+      {"item": "viz_kpi_copilot", "type": "block", "position": {"x": 1000, "y": 0, "w": 200, "h": 120}},
+      {"item": "viz_provider_time", "type": "block", "position": {"x": 0, "y": 120, "w": 800, "h": 300}},
+      {"item": "viz_provider_status", "type": "block", "position": {"x": 800, "y": 120, "w": 400, "h": 300}},
+      {"item": "viz_onboarding", "type": "block", "position": {"x": 0, "y": 420, "w": 1200, "h": 200}}
+    ],
+    "globalInputs": ["input_timerange"]
+  }
+}
+  ]]></definition>
+</dashboard>
