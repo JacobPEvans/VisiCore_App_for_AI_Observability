@@ -1,14 +1,23 @@
 # VisiCore App for AI Observability
 
 Splunk App providing Dashboard Studio v2 dashboards for AI coding tool observability.
-Companion to [VisiCore_TA_AI_Observability](https://github.com/JacobPEvans/VisiCore_TA_AI_Observability).
+
+This app ships **dashboards only**. It expects a companion technology add-on (TA) to already be
+installed on the search head — the TA supplies the index-time/search-time knowledge objects the
+dashboards depend on: the per-provider index macros, the CIM-mapped metric event fields, the
+reporting macros (`claude_metric_events`, `extract_tools`, `calculate_cost`, …), and the pricing
+lookup (`ai_model_pricing.csv`). See [Installation](#installation) for the exact contract.
 
 ## Architecture
 
 ```text
 Filesystem -> Cribl Edge -> Cribl Stream -> Splunk HEC -> Splunk Enterprise
-   (JSON)      (packs)      (routing)       (port 8088)    (index=claude)
+   (JSON)     (collect)      (routing)       (port 8088)    (index=claude)
 ```
+
+The dashboards sit at the right-hand end of this pipeline: they only query the Splunk indexes the
+data lands in. Any collection path that delivers the expected JSON events to those indexes works —
+the diagram above shows the reference path, not a hard requirement.
 
 ## Dashboards
 
@@ -17,7 +26,7 @@ Filesystem -> Cribl Edge -> Cribl Stream -> Splunk HEC -> Splunk Enterprise
 - **Claude Code Overview** - KPIs, token trends, cost, cache, model distribution, tool usage, top sessions
 - **Token Usage** - Token mix across input, output, cache read, cache creation; per-model and per-session
 - **Cost Analysis** - Lookup-driven spend by model, session, and project, with an Unpriced Messages KPI
-  that surfaces models missing from the TA's pricing lookup
+  that surfaces models missing from the add-on's pricing lookup
 - **Tool Activity** - Tool call patterns and file operations
 - **Sessions** - Session-level analysis with duration, project attribution, and drill-down filtering
 - **Cache Performance** - Prompt caching efficiency and model-aware estimated savings
@@ -29,9 +38,9 @@ Filesystem -> Cribl Edge -> Cribl Stream -> Splunk HEC -> Splunk Enterprise
   their own `queryParameters` and stay within Splunk's documented limits (max 10 chains per base, one level).
 - **Shared `defaults` block** supplies the global time range to all base searches; filter tokens are consumed
   only in base searches.
-- **All metric SPL routes through TA macros** (`claude_metric_events`, `extract_tools`, ...). Zero inline
-  pricing or token math — pricing lives only in the TA's `ai_model_pricing.csv` lookup. CI enforces this
-  via `scripts/validate_dashboards.py`.
+- **All metric SPL routes through add-on macros** (`claude_metric_events`, `extract_tools`, ...). Zero
+  inline pricing or token math — pricing lives only in the add-on's `ai_model_pricing.csv` lookup. CI
+  enforces this via `scripts/validate_dashboards.py`.
 - **Packaging format**: Dashboard Studio definitions ship as JSON inside
   `<dashboard version="2">` XML CDATA under `default/data/ui/views/`. Standalone `.json` files are not
   loadable by Splunk app packaging — the XML wrapper with embedded JSON is the canonical on-disk format.
@@ -40,17 +49,31 @@ Filesystem -> Cribl Edge -> Cribl Stream -> Splunk HEC -> Splunk Enterprise
 
 ## Installation
 
-Requires the companion TA (>= 0.2.0) installed first:
+These dashboards have **no inline SPL logic of their own** — every search resolves through macros and a
+lookup that a companion technology add-on (TA) must provide on the same search head. Install that add-on
+first, then this app:
 
 ```bash
-splunk install app VisiCore_TA_AI_Observability-*.tar.gz
+splunk install app <ai-observability-add-on>-*.tar.gz   # provides the contract below
 splunk install app VisiCore_App_for_AI_Observability-*.tar.gz
 splunk restart
 ```
 
-Ensure indexes exist: `claude`, `gemini` (plus `vscode`/`openai` for Copilot/OpenAI feeds).
-Configure data inputs via the cc-edge Cribl packs. Index locations are configurable by overriding the TA's
-`claude_index` / `gemini_index` / `copilot_index` / `openai_index` macros in `local/`.
+### Add-on contract
+
+The dashboards will not render until a search-head add-on supplies:
+
+- **Indexes / data**: CIM-aligned AI metric events landing in `claude`, `gemini`
+  (plus `vscode`/`openai` for Copilot/OpenAI feeds). Each provider's index is selected by a
+  macro — `claude_index` / `gemini_index` / `copilot_index` / `openai_index` — so locations are
+  overridable without editing the dashboards.
+- **Reporting macros**: `claude_metric_events`, `extract_tools`, `calculate_cost`, and the
+  per-provider event/index macros referenced throughout the dashboards.
+- **Pricing lookup**: `ai_model_pricing.csv`, keyed by model, used by `calculate_cost`. Models absent
+  from this lookup surface on the Unpriced Messages KPI rather than silently costing $0.
+
+Any add-on that satisfies this contract works; the dashboards do not hard-code an add-on name. Ensure
+the listed indexes exist (or are remapped via the `*_index` macros) before loading the app.
 
 ## Usage
 
@@ -91,12 +114,13 @@ Produces a versioned tarball in `build/`.
   searches with `ds.chain` post-processing (previously non-transforming bases with `ds.search`+`extend`),
   shared `defaults` block, null-safe KPI chains ending in `| fields`.
 - New **AI Overview** cross-provider landing dashboard with graceful no-data provider status.
-- Inline pricing math removed everywhere; cost flows through the TA's `calculate_cost` lookup macro,
+- Inline pricing math removed everywhere; cost flows through the add-on's `calculate_cost` lookup macro,
   with new Unpriced Messages visibility on Cost Analysis.
 - Model/project filter inputs added (Token Usage, Cost Analysis, Cache Performance, Sessions);
   cross-dashboard drilldowns added.
 - CI added: AppInspect + dashboard structural validation.
-- Requires VisiCore_TA_AI_Observability >= 0.2.0 (canonical token field names, `claude_metric_events` macro).
+- Requires a companion add-on providing the v0.2.0 contract: canonical token field names and the
+  `claude_metric_events` macro (see [Installation](#installation)).
 
 ## References
 
@@ -106,3 +130,7 @@ Produces a versioned tarball in `build/`.
 - [ccusage](https://github.com/ryoppippi/ccusage) - Token model reference
 - [Splunk CIM](https://help.splunk.com/en/splunk-enterprise/common-information-model/5.3/data-models/cim-fields-per-associated-data-model)
 - [Chain searches (Splunk 10.x)](https://help.splunk.com/en/splunk-enterprise/create-dashboards-and-reports/dashboard-studio/10.0/use-data-sources/chain-searches-together-with-a-base-search-and-chain-searches)
+
+---
+
+> Part of a [larger ecosystem of ~40 repos](https://docs.jacobpevans.com) — see how it all fits together.
