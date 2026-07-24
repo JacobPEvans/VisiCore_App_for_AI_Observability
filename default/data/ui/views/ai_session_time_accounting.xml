@@ -1,0 +1,128 @@
+<dashboard version="2" theme="dark">
+  <label>AI Session Time Accounting</label>
+  <description>Where every second of a session went, single-session drill-down or fleet-wide rollup</description>
+  <definition><![CDATA[
+{
+  "title": "AI Session Time Accounting",
+  "description": "Where every second of a session went: TOOL_EXEC, SUBAGENT_WAIT, MODEL_ACTIVE, HUMAN_IDLE, SYSTEM_OVERHEAD. Leave Session ID as * for a fleet-wide rollup.",
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": {
+          "queryParameters": {
+            "earliest": "$global_time.earliest$",
+            "latest": "$global_time.latest$"
+          }
+        }
+      }
+    }
+  },
+  "inputs": {
+    "input_timerange": {
+      "type": "input.timerange",
+      "options": {
+        "token": "global_time",
+        "defaultValue": "-7d@d,now"
+      },
+      "title": "Time Range"
+    },
+    "input_session": {
+      "type": "input.text",
+      "title": "Session ID (* = fleet-wide)",
+      "options": {
+        "token": "session_tok",
+        "defaultValue": "*"
+      }
+    }
+  },
+  "dataSources": {
+    "ds_base_category_totals": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_time_accounting_by_gap($session_tok|s$)` | eventstats sum(gap_sec) as total_gap | eval pct=round(gap_sec/total_gap*100,1)"
+      },
+      "name": "Base: Category Totals"
+    },
+    "ds_category_table": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_category_totals",
+        "query": "| rename time_category as Category, gap_min as Minutes, turns as Turns, pct as \"% of Total\" | fields Category, Minutes, Turns, \"% of Total\" | sort - Minutes"
+      },
+      "name": "Category Totals"
+    },
+    "ds_category_bar": {
+      "type": "ds.chain",
+      "options": {
+        "extend": "ds_base_category_totals",
+        "query": "| rename time_category as Category, gap_min as Minutes | fields Category, Minutes | sort - Minutes"
+      },
+      "name": "Category Time (min)"
+    },
+    "ds_base_top_gaps": {
+      "type": "ds.search",
+      "options": {
+        "query": "`claude_index` sourcetype=claude:code* type=assistant sessionId=$session_tok|s$ | sort 0 source -_time | streamstats current=f last(_time) as nxt by source | eval gap=nxt-_time | where isnotnull(gap) | spath path=\"message.content{}.name\" output=tool | spath path=\"message.content{}.type\" output=ctype | eval time_category=case(isnotnull(mvfind(tool,\"Agent\")) OR isnotnull(mvfind(tool,\"Task\")),\"SUBAGENT_WAIT\", isnotnull(tool),\"TOOL_EXEC\", isnotnull(mvfind(ctype,\"text\")),\"HUMAN_IDLE\", 1=1,\"MODEL_ACTIVE\") | eval label=coalesce(mvjoin(tool,\",\"), time_category) | stats max(gap) as gap_sec values(time_category) as Category values(label) as Label values(sessionId) as \"Session ID\" by _time, source | eval \"Gap (min)\"=round(gap_sec/60,1), Started=strftime(_time,\"%Y-%m-%d %H:%M:%S\") | sort - gap_sec | head 25 | rename source as Source | fields Started, \"Session ID\", Source, Category, Label, \"Gap (min)\""
+      },
+      "name": "Base: Top Individual Gaps"
+    }
+  },
+  "visualizations": {
+    "viz_category_bar": {
+      "type": "splunk.bar",
+      "title": "Time by Category (minutes)",
+      "dataSources": {
+        "primary": "ds_category_bar"
+      },
+      "options": {}
+    },
+    "viz_category_table": {
+      "type": "splunk.table",
+      "title": "Category Totals",
+      "dataSources": {
+        "primary": "ds_category_table"
+      },
+      "options": {}
+    },
+    "viz_top_gaps": {
+      "type": "splunk.table",
+      "title": "Longest Individual Gaps",
+      "dataSources": {
+        "primary": "ds_base_top_gaps"
+      },
+      "options": {},
+      "eventHandlers": [
+        {
+          "type": "drilldown.setToken",
+          "options": {
+            "tokens": [
+              {
+                "token": "session_tok",
+                "value": "row.Session ID.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "viz_documentation": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "**Two modes** — set **Session ID** to drill into one session (sum of gaps across its main file and any subagent files sharing that `sessionId`); leave it at `*` for a fleet-wide rollup of the same 5 categories across every session in `index=claude` over the selected time range.\n\n**Categories** — `TOOL_EXEC` (Bash/Read/MCP tool calls), `SUBAGENT_WAIT` (spawned subagent), `MODEL_ACTIVE` (thinking/generating), `HUMAN_IDLE` (handed back, awaiting input), `SYSTEM_OVERHEAD` (small unclassified remainder). The shared `claude_time_accounting_by_gap` TA macro currently folds `SYSTEM_OVERHEAD` into `MODEL_ACTIVE` rather than emitting it separately — this dashboard reports whatever the macro emits (4 buckets today) rather than re-deriving a 5th.\n\n**Known limitation** — classification is per-`source` (one session/subagent JSONL file) in isolation. A `HUMAN_IDLE`-looking gap in the main session that actually overlapped with a concurrently-running subagent in a *different* `source` file is not reclassified as `SUBAGENT_WAIT` — that needs cross-file timestamp-window correlation this gap/streamstats pattern can't do.\n\nClick a row in **Longest Individual Gaps** to drill that session into every panel."
+      }
+    }
+  },
+  "layout": {
+    "type": "grid",
+    "options": {},
+    "structure": [
+      {"item": "viz_category_bar", "type": "block", "position": {"x": 0, "y": 0, "w": 600, "h": 300}},
+      {"item": "viz_category_table", "type": "block", "position": {"x": 600, "y": 0, "w": 600, "h": 300}},
+      {"item": "viz_top_gaps", "type": "block", "position": {"x": 0, "y": 300, "w": 1200, "h": 360}},
+      {"item": "viz_documentation", "type": "block", "position": {"x": 0, "y": 660, "w": 1200, "h": 220}}
+    ],
+    "globalInputs": ["input_timerange", "input_session"]
+  }
+}
+  ]]></definition>
+</dashboard>

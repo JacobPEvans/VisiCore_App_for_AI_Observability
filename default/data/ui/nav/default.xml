@@ -5,6 +5,7 @@
     <view name="cost_analysis" />
     <view name="tool_activity" />
     <view name="sessions" />
+    <view name="ai_session_time_accounting" />
     <view name="cache_performance" />
     <view name="search" />
 </nav>

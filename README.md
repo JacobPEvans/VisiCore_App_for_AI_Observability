@@ -20,6 +20,9 @@ Filesystem -> Cribl Edge -> Cribl Stream -> Splunk HEC -> Splunk Enterprise
   that surfaces models missing from the TA's pricing lookup
 - **Tool Activity** - Tool call patterns and file operations
 - **Sessions** - Session-level analysis with duration, project attribution, and drill-down filtering
+- **AI Session Time Accounting** - Where every second of a session went (TOOL_EXEC, SUBAGENT_WAIT,
+  MODEL_ACTIVE, HUMAN_IDLE, SYSTEM_OVERHEAD); drill into one session by ID or leave it as `*` for a
+  fleet-wide rollup
 - **Cache Performance** - Prompt caching efficiency and model-aware estimated savings
 
 ## Dashboard conventions (Splunk 10.x Dashboard Studio)
@@ -62,7 +65,8 @@ Navigate to the VisiCore app in Splunk Web. **AI Overview** is the landing page:
 4. **Cost Analysis** - Track spend by model, session, and project; watch the Unpriced Messages KPI
 5. **Tool Activity** - Monitor tool call patterns and file operations
 6. **Sessions** - Analyze individual coding sessions (filter by project or session ID)
-7. **Cache Performance** - Evaluate prompt caching efficiency and savings
+7. **AI Session Time Accounting** - See where a session's time went by category, or roll up the fleet
+8. **Cache Performance** - Evaluate prompt caching efficiency and savings
 
 All dashboards share a global time range picker (default: last 7 days).
 
@@ -84,6 +88,11 @@ no-inline-pricing guard. CI runs this plus Splunk AppInspect on every push.
 Produces a versioned tarball in `build/`.
 
 ## Release Notes
+
+### 0.3.0
+
+- New **AI Session Time Accounting** dashboard: TOOL_EXEC/SUBAGENT_WAIT/MODEL_ACTIVE/HUMAN_IDLE
+  time accounting per session or fleet-wide, via the TA's `claude_time_accounting_by_gap` macro.
 
 ### 0.2.0
 
